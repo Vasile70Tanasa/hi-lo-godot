@@ -2,6 +2,29 @@
 
 [ext_resource type="Script" uid="uid://m0grq2sd2saj" path="res://scripts/main.gd" id="1"]
 
+[sub_resource type="StyleBoxFlat" id="1"]
+bg_color = Color(0.968627, 0.952941, 0.909804, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.14902, 0.184314, 0.231373, 0.18)
+corner_radius_top_left = 28
+corner_radius_top_right = 28
+corner_radius_bottom_right = 28
+corner_radius_bottom_left = 28
+shadow_color = Color(0, 0, 0, 0.2)
+shadow_size = 12
+
+[sub_resource type="StyleBoxFlat" id="2"]
+bg_color = Color(0.0745098, 0.0941176, 0.105882, 0.88)
+corner_radius_top_left = 24
+corner_radius_top_right = 24
+corner_radius_bottom_right = 24
+corner_radius_bottom_left = 24
+shadow_color = Color(0, 0, 0, 0.25)
+shadow_size = 18
+
 [node name="Main" type="Control" unique_id=1588879916]
 layout_mode = 3
 anchors_preset = 15
@@ -18,69 +41,253 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-color = Color(0.1, 0.15, 0.1, 1)
+color = Color(0.0823529, 0.345098, 0.207843, 1)
 
-[node name="VBox" type="VBoxContainer" parent="." unique_id=116592144]
+[node name="GameMargin" type="MarginContainer" parent="."]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = 200.0
-offset_top = 50.0
-offset_right = -200.0
-offset_bottom = -50.0
+offset_left = 16.0
+offset_top = 16.0
+offset_right = -16.0
+offset_bottom = -16.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_constants/separation = 30
-alignment = 1
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 8
 
-[node name="Title" type="Label" parent="VBox" unique_id=1313353422]
+[node name="GameVBox" type="VBoxContainer" parent="GameMargin"]
 layout_mode = 2
+size_flags_vertical = 8
+theme_override_constants/separation = 10
+alignment = 0
+
+[node name="TopBar" type="GridContainer" parent="GameMargin/GameVBox"]
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_constants/h_separation = 18
+theme_override_constants/v_separation = 6
+columns = 2
+
+[node name="ScoreLabel" type="Label" parent="GameMargin/GameVBox/TopBar" unique_id=165941633]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_font_sizes/font_size = 16
+text = "Scor: 0"
+horizontal_alignment = 1
+
+[node name="HighScoreLabel" type="Label" parent="GameMargin/GameVBox/TopBar"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_font_sizes/font_size = 16
+text = "Best: 0"
+horizontal_alignment = 1
+
+[node name="RemainingLabel" type="Label" parent="GameMargin/GameVBox/TopBar"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_font_sizes/font_size = 16
+text = "Carti ramase: 52 / 52"
+horizontal_alignment = 1
+
+[node name="StreakLabel" type="Label" parent="GameMargin/GameVBox/TopBar"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_font_sizes/font_size = 16
+text = "Streak: 0"
+horizontal_alignment = 1
+
+[node name="Title" type="Label" parent="GameMargin/GameVBox" unique_id=1313353422]
+layout_mode = 2
+theme_override_font_sizes/font_size = 28
 text = "Higher or Lower?"
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="Title2" type="Label" parent="VBox" unique_id=1372950034]
+[node name="SubtitleLabel" type="Label" parent="GameMargin/GameVBox" unique_id=1372950034]
 unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "Ghicește dacă următoarea carte va fi mai mare sau mai mică."
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="CardArea" type="CenterContainer" parent="GameMargin/GameVBox"]
 layout_mode = 2
 
-[node name="CardLabel" type="Label" parent="VBox" unique_id=1655262213]
+[node name="CardPanel" type="PanelContainer" parent="GameMargin/GameVBox/CardArea"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(190, 220)
+layout_mode = 2
+theme_override_styles/panel = SubResource("1")
+
+[node name="CardMargin" type="MarginContainer" parent="GameMargin/GameVBox/CardArea/CardPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 18
+theme_override_constants/margin_top = 18
+theme_override_constants/margin_right = 18
+theme_override_constants/margin_bottom = 18
+
+[node name="CardFace" type="VBoxContainer" parent="GameMargin/GameVBox/CardArea/CardPanel/CardMargin"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="TopRow" type="HBoxContainer" parent="GameMargin/GameVBox/CardArea/CardPanel/CardMargin/CardFace"]
+layout_mode = 2
+
+[node name="TopCorner" type="VBoxContainer" parent="GameMargin/GameVBox/CardArea/CardPanel/CardMargin/CardFace/TopRow"]
+layout_mode = 2
+
+[node name="CornerRankTop" type="Label" parent="GameMargin/GameVBox/CardArea/CardPanel/CardMargin/CardFace/TopRow/TopCorner"]
 unique_name_in_owner = true
 layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "A"
+
+[node name="CornerSuitTop" type="Label" parent="GameMargin/GameVBox/CardArea/CardPanel/CardMargin/CardFace/TopRow/TopCorner"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "?"
+
+[node name="TopSpacer" type="Control" parent="GameMargin/GameVBox/CardArea/CardPanel/CardMargin/CardFace/TopRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="CenterArea" type="CenterContainer" parent="GameMargin/GameVBox/CardArea/CardPanel/CardMargin/CardFace"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="CenterVBox" type="VBoxContainer" parent="GameMargin/GameVBox/CardArea/CardPanel/CardMargin/CardFace/CenterArea"]
+layout_mode = 2
+theme_override_constants/separation = 4
+alignment = 1
+
+[node name="CardSuitCenter" type="Label" parent="GameMargin/GameVBox/CardArea/CardPanel/CardMargin/CardFace/CenterArea/CenterVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 44
+text = "?"
+horizontal_alignment = 1
+
+[node name="CardLabel" type="Label" parent="GameMargin/GameVBox/CardArea/CardPanel/CardMargin/CardFace/CenterArea/CenterVBox" unique_id=1655262213]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 38
+text = "?"
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="ScoreLabel" type="Label" parent="VBox" unique_id=165941633]
+[node name="BottomRow" type="HBoxContainer" parent="GameMargin/GameVBox/CardArea/CardPanel/CardMargin/CardFace"]
+layout_mode = 2
+
+[node name="BottomSpacer" type="Control" parent="GameMargin/GameVBox/CardArea/CardPanel/CardMargin/CardFace/BottomRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="BottomCorner" type="VBoxContainer" parent="GameMargin/GameVBox/CardArea/CardPanel/CardMargin/CardFace/BottomRow"]
+layout_mode = 2
+
+[node name="CornerRankBottom" type="Label" parent="GameMargin/GameVBox/CardArea/CardPanel/CardMargin/CardFace/BottomRow/BottomCorner"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "Scor: 0"
-horizontal_alignment = 1
+theme_override_font_sizes/font_size = 22
+text = "A"
+horizontal_alignment = 2
 
-[node name="Buttons" type="HBoxContainer" parent="VBox" unique_id=324909605]
+[node name="CornerSuitBottom" type="Label" parent="GameMargin/GameVBox/CardArea/CardPanel/CardMargin/CardFace/BottomRow/BottomCorner"]
+unique_name_in_owner = true
 layout_mode = 2
-theme_override_constants/separation = 40
+theme_override_font_sizes/font_size = 18
+text = "?"
+horizontal_alignment = 2
+
+[node name="Buttons" type="HBoxContainer" parent="GameMargin/GameVBox" unique_id=324909605]
+layout_mode = 2
+theme_override_constants/separation = 16
 alignment = 1
 
-[node name="HigherButton" type="Button" parent="VBox/Buttons" unique_id=1865003226]
+[node name="HigherButton" type="Button" parent="GameMargin/GameVBox/Buttons" unique_id=1865003226]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(150, 50)
+custom_minimum_size = Vector2(136, 42)
 layout_mode = 2
+theme_override_font_sizes/font_size = 18
 text = "Mai Mare"
 
-[node name="LowerButton" type="Button" parent="VBox/Buttons" unique_id=448270304]
+[node name="LowerButton" type="Button" parent="GameMargin/GameVBox/Buttons" unique_id=448270304]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(150, 50)
+custom_minimum_size = Vector2(136, 42)
 layout_mode = 2
+theme_override_font_sizes/font_size = 18
 text = "Mai Mica"
 
-[node name="ResultLabel" type="Label" parent="VBox" unique_id=1007111592]
+[node name="ResultLabel" type="Label" parent="GameMargin/GameVBox" unique_id=1007111592]
 unique_name_in_owner = true
 layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = "Apasa Start ca sa incepi."
 horizontal_alignment = 1
+autowrap_mode = 3
 
-[node name="PlayAgainButton" type="Button" parent="VBox" unique_id=1929045118]
+[node name="PlayAgainButton" type="Button" parent="GameMargin/GameVBox" unique_id=1929045118]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(150, 50)
+visible = false
+custom_minimum_size = Vector2(156, 42)
 layout_mode = 2
 size_flags_horizontal = 4
+theme_override_font_sizes/font_size = 17
 text = "Joaca Din Nou"
+
+[node name="StartOverlay" type="CenterContainer" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="StartPanel" type="PanelContainer" parent="StartOverlay"]
+custom_minimum_size = Vector2(320, 180)
+layout_mode = 2
+theme_override_styles/panel = SubResource("2")
+
+[node name="StartMargin" type="MarginContainer" parent="StartOverlay/StartPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 22
+theme_override_constants/margin_top = 22
+theme_override_constants/margin_right = 22
+theme_override_constants/margin_bottom = 22
+
+[node name="StartVBox" type="VBoxContainer" parent="StartOverlay/StartPanel/StartMargin"]
+layout_mode = 2
+theme_override_constants/separation = 8
+alignment = 1
+
+[node name="StartTitle" type="Label" parent="StartOverlay/StartPanel/StartMargin/StartVBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "Hi-Lo"
+horizontal_alignment = 1
+
+[node name="StartText" type="Label" parent="StartOverlay/StartPanel/StartMargin/StartVBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "Vezi o carte, alegi Mai Mare sau Mai Mica, iar o egalitate inseamna pierdere."
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="StartButton" type="Button" parent="StartOverlay/StartPanel/StartMargin/StartVBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(148, 42)
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_font_sizes/font_size = 18
+text = "Start Joc"

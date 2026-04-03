@@ -1,7 +1,0 @@
-63f7b34db8d8cdea90c76aacccf841ec
-::res://::1775207383
-::res://scenes/::1775207164
-main.tscn::PackedScene::-1::1775207164::0::1::::<><><>0<>0<><>::res://scripts/main.gd
-::res://scripts/::1775207151
-deck.gd::GDScript::8799845692093071638::1775207122::0::1::::Deck<>RefCounted<><>0<>0<><>::
-main.gd::GDScript::894271110867115225::1775207141::0::1::::<>Control<><>0<>0<><>::

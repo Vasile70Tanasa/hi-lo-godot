@@ -67,11 +67,11 @@ func start_game() -> void:
 	current_card = deck.draw()
 	start_overlay.visible = false
 	play_again_button.visible = false
-	subtitle_label.text = "Ghicește dacă următoarea carte este mai mare sau mai mică."
+	subtitle_label.text = "Guess whether the next card will be higher or lower."
 	_apply_card_visual(current_card)
 	_play_card_sound()
 	_update_status_labels()
-	_set_result_text("Egalitatea inseamna pierdere.", RESULT_NEUTRAL)
+	_set_result_text("A tie counts as a loss.", RESULT_NEUTRAL)
 	_set_guess_buttons_enabled(true)
 
 func _show_start_state() -> void:
@@ -83,16 +83,16 @@ func _show_start_state() -> void:
 	_apply_card_back()
 	score = 0
 	_update_status_labels()
-	subtitle_label.text = "Un joc mic de Godot pentru exersat scene, UI si scripturi."
-	_set_result_text("Apasa Start ca sa incepi.", RESULT_NEUTRAL)
+	subtitle_label.text = "A small Godot game for practicing scenes, UI, and scripts."
+	_set_result_text("Press Start to begin.", RESULT_NEUTRAL)
 	play_again_button.visible = false
 	_set_guess_buttons_enabled(false)
 
 func _update_status_labels() -> void:
-	score_label.text = "Scor: %d" % score
+	score_label.text = "Score: %d" % score
 	high_score_label.text = "Best: %d" % high_score
 	var cards_left: int = Deck.TOTAL_CARDS if deck == null or current_card.is_empty() else deck.cards_left()
-	remaining_label.text = "Carti ramase: %d / %d" % [cards_left, Deck.TOTAL_CARDS]
+	remaining_label.text = "Cards left: %d / %d" % [cards_left, Deck.TOTAL_CARDS]
 	streak_label.text = "Streak: %d" % score
 	var streak_color: Color = Color("f5f1da")
 	if score >= 10:
@@ -155,7 +155,7 @@ func guess(player_said_higher: bool) -> void:
 	if not round_active or input_locked:
 		return
 	if deck.is_empty():
-		_finish_round("Ai terminat tot pachetul! Bravo!", true)
+		_finish_round("You cleared the whole deck! Nice job!", true)
 		return
 
 	input_locked = true
@@ -166,10 +166,10 @@ func guess(player_said_higher: bool) -> void:
 	var next_value: int = Deck.card_value(next_card)
 	await _animate_card_reveal(next_card)
 	current_card = next_card
-	var comparison_text: String = "%s dupa %s." % [Deck.card_text(next_card), Deck.card_text(previous_card)]
+	var comparison_text: String = "%s after %s." % [Deck.card_text(next_card), Deck.card_text(previous_card)]
 
 	if next_value == previous_value:
-		_finish_round("Egalitate! %s" % comparison_text, false)
+		_finish_round("Tie! %s" % comparison_text, false)
 		return
 
 	var guessed_right: bool = player_said_higher == (next_value > previous_value)
@@ -178,16 +178,16 @@ func guess(player_said_higher: bool) -> void:
 		_update_high_score()
 		_update_status_labels()
 		_play_success_sound()
-		_set_result_text("Corect! %s" % comparison_text, RESULT_SUCCESS)
+		_set_result_text("Correct! %s" % comparison_text, RESULT_SUCCESS)
 		_animate_streak()
 		_emit_streak_particles()
 		input_locked = false
 		if deck.is_empty():
-			_finish_round("Ai golit pachetul! Scor final: %d" % score, true)
+			_finish_round("You emptied the deck! Final score: %d" % score, true)
 			return
 		_set_guess_buttons_enabled(true)
 	else:
-		_finish_round("Gresit! %s Scor final: %d" % [comparison_text, score], false)
+		_finish_round("Wrong! %s Final score: %d" % [comparison_text, score], false)
 
 func _animate_card_reveal(card: Dictionary) -> void:
 	_refresh_pivots()
@@ -248,12 +248,12 @@ func _finish_round(message: String, won: bool) -> void:
 	_set_guess_buttons_enabled(false)
 	play_again_button.visible = true
 	if won:
-		subtitle_label.text = "Runda s-a incheiat. Poti incepe imediat alta."
+		subtitle_label.text = "The round is over. You can start another one right away."
 		_set_result_text(message, RESULT_WIN)
 	else:
 		_play_fail_sound()
 		_shake_screen()
-		subtitle_label.text = "Ai pierdut runda curenta. Incearca din nou."
+		subtitle_label.text = "You lost the current round. Try again."
 		_set_result_text(message, RESULT_FAIL)
 	_update_status_labels()
 

@@ -39,6 +39,20 @@ var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 @onready var streak_label: Label = %StreakLabel
 @onready var higher_button: Button = %HigherButton
 @onready var lower_button: Button = %LowerButton
+@onready var lower_preview_panel: PanelContainer = %LowerPreviewPanel
+@onready var lower_preview_rank_top: Label = %LowerPreviewRankTop
+@onready var lower_preview_suit_top: Label = %LowerPreviewSuitTop
+@onready var lower_preview_suit_center: Label = %LowerPreviewSuitCenter
+@onready var lower_preview_rank_center: Label = %LowerPreviewRankCenter
+@onready var lower_preview_rank_bottom: Label = %LowerPreviewRankBottom
+@onready var lower_preview_suit_bottom: Label = %LowerPreviewSuitBottom
+@onready var higher_preview_panel: PanelContainer = %HigherPreviewPanel
+@onready var higher_preview_rank_top: Label = %HigherPreviewRankTop
+@onready var higher_preview_suit_top: Label = %HigherPreviewSuitTop
+@onready var higher_preview_suit_center: Label = %HigherPreviewSuitCenter
+@onready var higher_preview_rank_center: Label = %HigherPreviewRankCenter
+@onready var higher_preview_rank_bottom: Label = %HigherPreviewRankBottom
+@onready var higher_preview_suit_bottom: Label = %HigherPreviewSuitBottom
 @onready var result_label: Label = %ResultLabel
 @onready var play_again_button: Button = %PlayAgainButton
 @onready var start_overlay: CenterContainer = %StartOverlay
@@ -71,7 +85,8 @@ func start_game() -> void:
 	_apply_card_visual(current_card)
 	_play_card_sound()
 	_update_status_labels()
-	_set_result_text("A tie counts as a loss.", RESULT_NEUTRAL)
+	_set_result_text("A tie discards both cards and deals a new one.", RESULT_NEUTRAL)
+	_reset_choice_slots()
 	_set_guess_buttons_enabled(true)
 
 func _show_start_state() -> void:
@@ -86,6 +101,7 @@ func _show_start_state() -> void:
 	subtitle_label.text = "A small Godot game for practicing scenes, UI, and scripts."
 	_set_result_text("Press Start to begin.", RESULT_NEUTRAL)
 	play_again_button.visible = false
+	_reset_choice_slots()
 	_set_guess_buttons_enabled(false)
 
 func _update_status_labels() -> void:
@@ -141,6 +157,66 @@ func _set_guess_buttons_enabled(is_enabled: bool) -> void:
 	higher_button.disabled = !is_enabled
 	lower_button.disabled = !is_enabled
 
+func _reset_choice_slots() -> void:
+	lower_preview_panel.visible = false
+	higher_preview_panel.visible = false
+	lower_button.visible = true
+	higher_button.visible = true
+
+func _show_choice_preview(show_higher_side: bool, card: Dictionary) -> void:
+	lower_button.visible = false
+	higher_button.visible = false
+	lower_preview_panel.visible = false
+	higher_preview_panel.visible = false
+
+	if show_higher_side:
+		_apply_preview_card(
+			card,
+			higher_preview_rank_top,
+			higher_preview_suit_top,
+			higher_preview_suit_center,
+			higher_preview_rank_center,
+			higher_preview_rank_bottom,
+			higher_preview_suit_bottom
+		)
+		higher_preview_panel.visible = true
+	else:
+		_apply_preview_card(
+			card,
+			lower_preview_rank_top,
+			lower_preview_suit_top,
+			lower_preview_suit_center,
+			lower_preview_rank_center,
+			lower_preview_rank_bottom,
+			lower_preview_suit_bottom
+		)
+		lower_preview_panel.visible = true
+
+func _apply_preview_card(
+	card: Dictionary,
+	rank_top: Label,
+	suit_top: Label,
+	suit_center: Label,
+	rank_center: Label,
+	rank_bottom: Label,
+	suit_bottom: Label
+) -> void:
+	var rank_text: String = Deck.rank_text(card)
+	var suit_symbol: String = Deck.suit_symbol(card)
+	var suit_color: Color = Deck.suit_color(card)
+	rank_top.text = rank_text
+	suit_top.text = suit_symbol
+	suit_center.text = suit_symbol
+	rank_center.text = rank_text
+	rank_bottom.text = rank_text
+	suit_bottom.text = suit_symbol
+	rank_top.add_theme_color_override("font_color", suit_color)
+	suit_top.add_theme_color_override("font_color", suit_color)
+	suit_center.add_theme_color_override("font_color", suit_color)
+	rank_center.add_theme_color_override("font_color", suit_color)
+	rank_bottom.add_theme_color_override("font_color", suit_color)
+	suit_bottom.add_theme_color_override("font_color", suit_color)
+
 func _refresh_pivots() -> void:
 	card_panel.pivot_offset = card_panel.size / 2.0
 	streak_label.pivot_offset = streak_label.size / 2.0
@@ -162,6 +238,7 @@ func guess(player_said_higher: bool) -> void:
 	_set_guess_buttons_enabled(false)
 	var previous_card: Dictionary = current_card
 	var previous_value: int = Deck.card_value(previous_card)
+	_show_choice_preview(player_said_higher, previous_card)
 	var next_card: Dictionary = deck.draw()
 	var next_value: int = Deck.card_value(next_card)
 	await _animate_card_reveal(next_card)
@@ -169,7 +246,7 @@ func guess(player_said_higher: bool) -> void:
 	var comparison_text: String = "%s after %s." % [Deck.card_text(next_card), Deck.card_text(previous_card)]
 
 	if next_value == previous_value:
-		_finish_round("Tie! %s" % comparison_text, false)
+		await _handle_tie(next_card)
 		return
 
 	var guessed_right: bool = player_said_higher == (next_value > previous_value)
@@ -181,13 +258,38 @@ func guess(player_said_higher: bool) -> void:
 		_set_result_text("Correct! %s" % comparison_text, RESULT_SUCCESS)
 		_animate_streak()
 		_emit_streak_particles()
-		input_locked = false
 		if deck.is_empty():
 			_finish_round("You emptied the deck! Final score: %d" % score, true)
 			return
+		await get_tree().create_timer(0.55).timeout
+		_reset_choice_slots()
+		input_locked = false
 		_set_guess_buttons_enabled(true)
 	else:
 		_finish_round("Wrong! %s Final score: %d" % [comparison_text, score], false)
+
+func _handle_tie(tie_card: Dictionary) -> void:
+	_update_status_labels()
+	_set_result_text("Tie on %s. Both cards are discarded." % Deck.card_text(tie_card), RESULT_NEUTRAL)
+	await get_tree().create_timer(0.45).timeout
+
+	if deck.is_empty():
+		_finish_round("No cards left to continue. Final score: %d" % score, true)
+		return
+
+	var new_current_card: Dictionary = deck.draw()
+	await _animate_card_reveal(new_current_card)
+	current_card = new_current_card
+	_update_status_labels()
+	_set_result_text("New card dealt. Make your next guess.", RESULT_NEUTRAL)
+
+	if deck.is_empty():
+		_finish_round("No cards left to compare. Final score: %d" % score, true)
+		return
+
+	_reset_choice_slots()
+	input_locked = false
+	_set_guess_buttons_enabled(true)
 
 func _animate_card_reveal(card: Dictionary) -> void:
 	_refresh_pivots()

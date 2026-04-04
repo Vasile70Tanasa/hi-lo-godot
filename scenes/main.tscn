@@ -45,13 +45,15 @@ color = Color(0.0823529, 0.345098, 0.207843, 1)
 
 [node name="GameMargin" type="MarginContainer" parent="."]
 layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-offset_left = 16.0
-offset_top = 16.0
-offset_right = -16.0
-offset_bottom = -16.0
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -250.0
+offset_top = -215.0
+offset_right = 250.0
+offset_bottom = 215.0
 grow_horizontal = 2
 grow_vertical = 2
 theme_override_constants/margin_left = 8
@@ -61,9 +63,9 @@ theme_override_constants/margin_bottom = 8
 
 [node name="GameVBox" type="VBoxContainer" parent="GameMargin"]
 layout_mode = 2
-size_flags_vertical = 8
+size_flags_horizontal = 4
 theme_override_constants/separation = 10
-alignment = 0
+alignment = 1
 
 [node name="TopBar" type="GridContainer" parent="GameMargin/GameVBox"]
 layout_mode = 2
@@ -119,65 +121,174 @@ text = "Guess whether the next card will be higher or lower."
 horizontal_alignment = 1
 autowrap_mode = 3
 
-[node name="CardArea" type="CenterContainer" parent="GameMargin/GameVBox"]
+[node name="ComparisonRow" type="HBoxContainer" parent="GameMargin/GameVBox"]
+layout_mode = 2
+theme_override_constants/separation = 18
+alignment = 1
+
+[node name="LowerChoiceSlot" type="Control" parent="GameMargin/GameVBox/ComparisonRow"]
+custom_minimum_size = Vector2(118, 154)
 layout_mode = 2
 
-[node name="CardPanel" type="PanelContainer" parent="GameMargin/GameVBox/CardArea"]
+[node name="LowerPreviewPanel" type="PanelContainer" parent="GameMargin/GameVBox/ComparisonRow/LowerChoiceSlot"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(190, 220)
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("1")
+
+[node name="LowerPreviewMargin" type="MarginContainer" parent="GameMargin/GameVBox/ComparisonRow/LowerChoiceSlot/LowerPreviewPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 12
+
+[node name="LowerPreviewFace" type="VBoxContainer" parent="GameMargin/GameVBox/ComparisonRow/LowerChoiceSlot/LowerPreviewPanel/LowerPreviewMargin"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="LowerPreviewTopRow" type="HBoxContainer" parent="GameMargin/GameVBox/ComparisonRow/LowerChoiceSlot/LowerPreviewPanel/LowerPreviewMargin/LowerPreviewFace"]
+layout_mode = 2
+
+[node name="LowerPreviewTopCorner" type="VBoxContainer" parent="GameMargin/GameVBox/ComparisonRow/LowerChoiceSlot/LowerPreviewPanel/LowerPreviewMargin/LowerPreviewFace/LowerPreviewTopRow"]
+layout_mode = 2
+
+[node name="LowerPreviewRankTop" type="Label" parent="GameMargin/GameVBox/ComparisonRow/LowerChoiceSlot/LowerPreviewPanel/LowerPreviewMargin/LowerPreviewFace/LowerPreviewTopRow/LowerPreviewTopCorner"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 17
+text = "A"
+
+[node name="LowerPreviewSuitTop" type="Label" parent="GameMargin/GameVBox/ComparisonRow/LowerChoiceSlot/LowerPreviewPanel/LowerPreviewMargin/LowerPreviewFace/LowerPreviewTopRow/LowerPreviewTopCorner"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "?"
+
+[node name="LowerPreviewTopSpacer" type="Control" parent="GameMargin/GameVBox/ComparisonRow/LowerChoiceSlot/LowerPreviewPanel/LowerPreviewMargin/LowerPreviewFace/LowerPreviewTopRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="LowerPreviewCenterArea" type="CenterContainer" parent="GameMargin/GameVBox/ComparisonRow/LowerChoiceSlot/LowerPreviewPanel/LowerPreviewMargin/LowerPreviewFace"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="LowerPreviewCenterVBox" type="VBoxContainer" parent="GameMargin/GameVBox/ComparisonRow/LowerChoiceSlot/LowerPreviewPanel/LowerPreviewMargin/LowerPreviewFace/LowerPreviewCenterArea"]
+layout_mode = 2
+theme_override_constants/separation = 2
+alignment = 1
+
+[node name="LowerPreviewSuitCenter" type="Label" parent="GameMargin/GameVBox/ComparisonRow/LowerChoiceSlot/LowerPreviewPanel/LowerPreviewMargin/LowerPreviewFace/LowerPreviewCenterArea/LowerPreviewCenterVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 30
+text = "?"
+horizontal_alignment = 1
+
+[node name="LowerPreviewRankCenter" type="Label" parent="GameMargin/GameVBox/ComparisonRow/LowerChoiceSlot/LowerPreviewPanel/LowerPreviewMargin/LowerPreviewFace/LowerPreviewCenterArea/LowerPreviewCenterVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "?"
+horizontal_alignment = 1
+
+[node name="LowerPreviewBottomRow" type="HBoxContainer" parent="GameMargin/GameVBox/ComparisonRow/LowerChoiceSlot/LowerPreviewPanel/LowerPreviewMargin/LowerPreviewFace"]
+layout_mode = 2
+
+[node name="LowerPreviewBottomSpacer" type="Control" parent="GameMargin/GameVBox/ComparisonRow/LowerChoiceSlot/LowerPreviewPanel/LowerPreviewMargin/LowerPreviewFace/LowerPreviewBottomRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="LowerPreviewBottomCorner" type="VBoxContainer" parent="GameMargin/GameVBox/ComparisonRow/LowerChoiceSlot/LowerPreviewPanel/LowerPreviewMargin/LowerPreviewFace/LowerPreviewBottomRow"]
+layout_mode = 2
+
+[node name="LowerPreviewRankBottom" type="Label" parent="GameMargin/GameVBox/ComparisonRow/LowerChoiceSlot/LowerPreviewPanel/LowerPreviewMargin/LowerPreviewFace/LowerPreviewBottomRow/LowerPreviewBottomCorner"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 17
+text = "A"
+horizontal_alignment = 2
+
+[node name="LowerPreviewSuitBottom" type="Label" parent="GameMargin/GameVBox/ComparisonRow/LowerChoiceSlot/LowerPreviewPanel/LowerPreviewMargin/LowerPreviewFace/LowerPreviewBottomRow/LowerPreviewBottomCorner"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "?"
+horizontal_alignment = 2
+
+[node name="LowerButton" type="Button" parent="GameMargin/GameVBox/ComparisonRow/LowerChoiceSlot" unique_id=448270304]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(140, 42)
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_font_sizes/font_size = 18
+text = "Lower"
+
+[node name="CardPanel" type="PanelContainer" parent="GameMargin/GameVBox/ComparisonRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(200, 235)
 layout_mode = 2
 theme_override_styles/panel = SubResource("1")
 
-[node name="CardMargin" type="MarginContainer" parent="GameMargin/GameVBox/CardArea/CardPanel"]
+[node name="CardMargin" type="MarginContainer" parent="GameMargin/GameVBox/ComparisonRow/CardPanel"]
 layout_mode = 2
 theme_override_constants/margin_left = 18
 theme_override_constants/margin_top = 18
 theme_override_constants/margin_right = 18
 theme_override_constants/margin_bottom = 18
 
-[node name="CardFace" type="VBoxContainer" parent="GameMargin/GameVBox/CardArea/CardPanel/CardMargin"]
+[node name="CardFace" type="VBoxContainer" parent="GameMargin/GameVBox/ComparisonRow/CardPanel/CardMargin"]
 layout_mode = 2
 size_flags_vertical = 3
 
-[node name="TopRow" type="HBoxContainer" parent="GameMargin/GameVBox/CardArea/CardPanel/CardMargin/CardFace"]
+[node name="TopRow" type="HBoxContainer" parent="GameMargin/GameVBox/ComparisonRow/CardPanel/CardMargin/CardFace"]
 layout_mode = 2
 
-[node name="TopCorner" type="VBoxContainer" parent="GameMargin/GameVBox/CardArea/CardPanel/CardMargin/CardFace/TopRow"]
+[node name="TopCorner" type="VBoxContainer" parent="GameMargin/GameVBox/ComparisonRow/CardPanel/CardMargin/CardFace/TopRow"]
 layout_mode = 2
 
-[node name="CornerRankTop" type="Label" parent="GameMargin/GameVBox/CardArea/CardPanel/CardMargin/CardFace/TopRow/TopCorner"]
+[node name="CornerRankTop" type="Label" parent="GameMargin/GameVBox/ComparisonRow/CardPanel/CardMargin/CardFace/TopRow/TopCorner"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 22
 text = "A"
 
-[node name="CornerSuitTop" type="Label" parent="GameMargin/GameVBox/CardArea/CardPanel/CardMargin/CardFace/TopRow/TopCorner"]
+[node name="CornerSuitTop" type="Label" parent="GameMargin/GameVBox/ComparisonRow/CardPanel/CardMargin/CardFace/TopRow/TopCorner"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 18
 text = "?"
 
-[node name="TopSpacer" type="Control" parent="GameMargin/GameVBox/CardArea/CardPanel/CardMargin/CardFace/TopRow"]
+[node name="TopSpacer" type="Control" parent="GameMargin/GameVBox/ComparisonRow/CardPanel/CardMargin/CardFace/TopRow"]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="CenterArea" type="CenterContainer" parent="GameMargin/GameVBox/CardArea/CardPanel/CardMargin/CardFace"]
+[node name="CenterArea" type="CenterContainer" parent="GameMargin/GameVBox/ComparisonRow/CardPanel/CardMargin/CardFace"]
 layout_mode = 2
 size_flags_vertical = 3
 
-[node name="CenterVBox" type="VBoxContainer" parent="GameMargin/GameVBox/CardArea/CardPanel/CardMargin/CardFace/CenterArea"]
+[node name="CenterVBox" type="VBoxContainer" parent="GameMargin/GameVBox/ComparisonRow/CardPanel/CardMargin/CardFace/CenterArea"]
 layout_mode = 2
 theme_override_constants/separation = 4
 alignment = 1
 
-[node name="CardSuitCenter" type="Label" parent="GameMargin/GameVBox/CardArea/CardPanel/CardMargin/CardFace/CenterArea/CenterVBox"]
+[node name="CardSuitCenter" type="Label" parent="GameMargin/GameVBox/ComparisonRow/CardPanel/CardMargin/CardFace/CenterArea/CenterVBox"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_font_sizes/font_size = 44
+theme_override_font_sizes/font_size = 46
 text = "?"
 horizontal_alignment = 1
 
-[node name="CardLabel" type="Label" parent="GameMargin/GameVBox/CardArea/CardPanel/CardMargin/CardFace/CenterArea/CenterVBox" unique_id=1655262213]
+[node name="CardLabel" type="Label" parent="GameMargin/GameVBox/ComparisonRow/CardPanel/CardMargin/CardFace/CenterArea/CenterVBox" unique_id=1655262213]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 38
@@ -185,48 +296,136 @@ text = "?"
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="BottomRow" type="HBoxContainer" parent="GameMargin/GameVBox/CardArea/CardPanel/CardMargin/CardFace"]
+[node name="BottomRow" type="HBoxContainer" parent="GameMargin/GameVBox/ComparisonRow/CardPanel/CardMargin/CardFace"]
 layout_mode = 2
 
-[node name="BottomSpacer" type="Control" parent="GameMargin/GameVBox/CardArea/CardPanel/CardMargin/CardFace/BottomRow"]
+[node name="BottomSpacer" type="Control" parent="GameMargin/GameVBox/ComparisonRow/CardPanel/CardMargin/CardFace/BottomRow"]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="BottomCorner" type="VBoxContainer" parent="GameMargin/GameVBox/CardArea/CardPanel/CardMargin/CardFace/BottomRow"]
+[node name="BottomCorner" type="VBoxContainer" parent="GameMargin/GameVBox/ComparisonRow/CardPanel/CardMargin/CardFace/BottomRow"]
 layout_mode = 2
 
-[node name="CornerRankBottom" type="Label" parent="GameMargin/GameVBox/CardArea/CardPanel/CardMargin/CardFace/BottomRow/BottomCorner"]
+[node name="CornerRankBottom" type="Label" parent="GameMargin/GameVBox/ComparisonRow/CardPanel/CardMargin/CardFace/BottomRow/BottomCorner"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 22
 text = "A"
 horizontal_alignment = 2
 
-[node name="CornerSuitBottom" type="Label" parent="GameMargin/GameVBox/CardArea/CardPanel/CardMargin/CardFace/BottomRow/BottomCorner"]
+[node name="CornerSuitBottom" type="Label" parent="GameMargin/GameVBox/ComparisonRow/CardPanel/CardMargin/CardFace/BottomRow/BottomCorner"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 18
 text = "?"
 horizontal_alignment = 2
 
-[node name="Buttons" type="HBoxContainer" parent="GameMargin/GameVBox" unique_id=324909605]
+[node name="HigherChoiceSlot" type="Control" parent="GameMargin/GameVBox/ComparisonRow"]
+custom_minimum_size = Vector2(118, 154)
 layout_mode = 2
-theme_override_constants/separation = 16
+
+[node name="HigherPreviewPanel" type="PanelContainer" parent="GameMargin/GameVBox/ComparisonRow/HigherChoiceSlot"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("1")
+
+[node name="HigherPreviewMargin" type="MarginContainer" parent="GameMargin/GameVBox/ComparisonRow/HigherChoiceSlot/HigherPreviewPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 12
+
+[node name="HigherPreviewFace" type="VBoxContainer" parent="GameMargin/GameVBox/ComparisonRow/HigherChoiceSlot/HigherPreviewPanel/HigherPreviewMargin"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="HigherPreviewTopRow" type="HBoxContainer" parent="GameMargin/GameVBox/ComparisonRow/HigherChoiceSlot/HigherPreviewPanel/HigherPreviewMargin/HigherPreviewFace"]
+layout_mode = 2
+
+[node name="HigherPreviewTopCorner" type="VBoxContainer" parent="GameMargin/GameVBox/ComparisonRow/HigherChoiceSlot/HigherPreviewPanel/HigherPreviewMargin/HigherPreviewFace/HigherPreviewTopRow"]
+layout_mode = 2
+
+[node name="HigherPreviewRankTop" type="Label" parent="GameMargin/GameVBox/ComparisonRow/HigherChoiceSlot/HigherPreviewPanel/HigherPreviewMargin/HigherPreviewFace/HigherPreviewTopRow/HigherPreviewTopCorner"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 17
+text = "A"
+
+[node name="HigherPreviewSuitTop" type="Label" parent="GameMargin/GameVBox/ComparisonRow/HigherChoiceSlot/HigherPreviewPanel/HigherPreviewMargin/HigherPreviewFace/HigherPreviewTopRow/HigherPreviewTopCorner"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "?"
+
+[node name="HigherPreviewTopSpacer" type="Control" parent="GameMargin/GameVBox/ComparisonRow/HigherChoiceSlot/HigherPreviewPanel/HigherPreviewMargin/HigherPreviewFace/HigherPreviewTopRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="HigherPreviewCenterArea" type="CenterContainer" parent="GameMargin/GameVBox/ComparisonRow/HigherChoiceSlot/HigherPreviewPanel/HigherPreviewMargin/HigherPreviewFace"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="HigherPreviewCenterVBox" type="VBoxContainer" parent="GameMargin/GameVBox/ComparisonRow/HigherChoiceSlot/HigherPreviewPanel/HigherPreviewMargin/HigherPreviewFace/HigherPreviewCenterArea"]
+layout_mode = 2
+theme_override_constants/separation = 2
 alignment = 1
 
-[node name="HigherButton" type="Button" parent="GameMargin/GameVBox/Buttons" unique_id=1865003226]
+[node name="HigherPreviewSuitCenter" type="Label" parent="GameMargin/GameVBox/ComparisonRow/HigherChoiceSlot/HigherPreviewPanel/HigherPreviewMargin/HigherPreviewFace/HigherPreviewCenterArea/HigherPreviewCenterVBox"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(136, 42)
 layout_mode = 2
+theme_override_font_sizes/font_size = 30
+text = "?"
+horizontal_alignment = 1
+
+[node name="HigherPreviewRankCenter" type="Label" parent="GameMargin/GameVBox/ComparisonRow/HigherChoiceSlot/HigherPreviewPanel/HigherPreviewMargin/HigherPreviewFace/HigherPreviewCenterArea/HigherPreviewCenterVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "?"
+horizontal_alignment = 1
+
+[node name="HigherPreviewBottomRow" type="HBoxContainer" parent="GameMargin/GameVBox/ComparisonRow/HigherChoiceSlot/HigherPreviewPanel/HigherPreviewMargin/HigherPreviewFace"]
+layout_mode = 2
+
+[node name="HigherPreviewBottomSpacer" type="Control" parent="GameMargin/GameVBox/ComparisonRow/HigherChoiceSlot/HigherPreviewPanel/HigherPreviewMargin/HigherPreviewFace/HigherPreviewBottomRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="HigherPreviewBottomCorner" type="VBoxContainer" parent="GameMargin/GameVBox/ComparisonRow/HigherChoiceSlot/HigherPreviewPanel/HigherPreviewMargin/HigherPreviewFace/HigherPreviewBottomRow"]
+layout_mode = 2
+
+[node name="HigherPreviewRankBottom" type="Label" parent="GameMargin/GameVBox/ComparisonRow/HigherChoiceSlot/HigherPreviewPanel/HigherPreviewMargin/HigherPreviewFace/HigherPreviewBottomRow/HigherPreviewBottomCorner"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 17
+text = "A"
+horizontal_alignment = 2
+
+[node name="HigherPreviewSuitBottom" type="Label" parent="GameMargin/GameVBox/ComparisonRow/HigherChoiceSlot/HigherPreviewPanel/HigherPreviewMargin/HigherPreviewFace/HigherPreviewBottomRow/HigherPreviewBottomCorner"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "?"
+horizontal_alignment = 2
+
+[node name="HigherButton" type="Button" parent="GameMargin/GameVBox/ComparisonRow/HigherChoiceSlot" unique_id=1865003226]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(140, 42)
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 theme_override_font_sizes/font_size = 18
 text = "Higher"
-
-[node name="LowerButton" type="Button" parent="GameMargin/GameVBox/Buttons" unique_id=448270304]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(136, 42)
-layout_mode = 2
-theme_override_font_sizes/font_size = 18
-text = "Lower"
 
 [node name="ResultLabel" type="Label" parent="GameMargin/GameVBox" unique_id=1007111592]
 unique_name_in_owner = true
@@ -280,7 +479,7 @@ horizontal_alignment = 1
 [node name="StartText" type="Label" parent="StartOverlay/StartPanel/StartMargin/StartVBox"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 14
-text = "See a card, choose Higher or Lower, and a tie means you lose."
+text = "See a card, choose Higher or Lower, and a tie discards both cards and deals a new one."
 horizontal_alignment = 1
 autowrap_mode = 3
 

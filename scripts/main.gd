@@ -20,6 +20,9 @@ var round_active: bool = false
 var input_locked: bool = false
 var awaiting_deck_pick: bool = false
 var pending_guess_higher: bool = false
+var remaining_deck_revealed: bool = false
+var remaining_deck_reveal_in_progress: bool = false
+var deck_reveal_generation: int = 0
 var shake_tween: Tween
 var card_sfx_player: AudioStreamPlayer
 var success_sfx_player: AudioStreamPlayer
@@ -28,6 +31,7 @@ var effects_layer: Control
 var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 
 @onready var deck_grid: GridContainer = %DeckGrid
+@onready var deck_label: Label = %DeckLabel
 @onready var subtitle_label: Label = %SubtitleLabel
 @onready var card_panel: PanelContainer = %CardPanel
 @onready var card_label: Label = %CardLabel
@@ -77,12 +81,15 @@ func _ready() -> void:
 	_show_start_state()
 
 func start_game() -> void:
+	deck_reveal_generation += 1
 	deck = Deck.new()
 	score = 0
 	round_active = true
 	input_locked = false
 	awaiting_deck_pick = false
 	pending_guess_higher = false
+	remaining_deck_revealed = false
+	remaining_deck_reveal_in_progress = false
 	current_card = deck.draw()
 	start_overlay.visible = false
 	play_again_button.visible = false
@@ -96,11 +103,14 @@ func start_game() -> void:
 	_set_guess_buttons_enabled(true)
 
 func _show_start_state() -> void:
+	deck_reveal_generation += 1
 	start_overlay.visible = true
 	round_active = false
 	input_locked = false
 	awaiting_deck_pick = false
 	pending_guess_higher = false
+	remaining_deck_revealed = false
+	remaining_deck_reveal_in_progress = false
 	current_card = {}
 	card_panel.scale = Vector2.ONE
 	card_panel.visible = true
@@ -125,7 +135,18 @@ func _update_status_labels() -> void:
 	elif score >= 5:
 		streak_color = Color("ffe29a")
 	streak_label.add_theme_color_override("font_color", streak_color)
+	_update_deck_label()
 	_rebuild_deck_view()
+
+func _update_deck_label() -> void:
+	if start_overlay.visible:
+		deck_label.text = "Deck"
+	elif remaining_deck_reveal_in_progress or (remaining_deck_revealed and !round_active):
+		deck_label.text = "Remaining Cards"
+	elif awaiting_deck_pick:
+		deck_label.text = "Pick a Card"
+	else:
+		deck_label.text = "Deck"
 
 func _get_cards_left_for_display() -> int:
 	if deck == null or current_card.is_empty():
@@ -138,10 +159,10 @@ func _rebuild_deck_view() -> void:
 		child.queue_free()
 
 	var cards_left: int = _get_cards_left_for_display()
-	var reveal_remaining_cards: bool = _should_reveal_remaining_deck()
+	var reveal_remaining_cards: bool = _should_show_remaining_deck_fronts()
 	for index in range(cards_left):
 		var deck_button: Button = Button.new()
-		deck_button.custom_minimum_size = Vector2(26, 38)
+		deck_button.custom_minimum_size = Vector2(34, 50)
 		deck_button.focus_mode = Control.FOCUS_NONE
 		if reveal_remaining_cards and deck != null and index < deck.cards.size():
 			var remaining_card: Dictionary = deck.cards[index]
@@ -165,18 +186,28 @@ func _make_deck_card_style(fill_color: Color, border_color: Color) -> StyleBoxFl
 	style.corner_radius_bottom_left = 6
 	return style
 
-func _should_reveal_remaining_deck() -> bool:
-	return !round_active and !start_overlay.visible and deck != null and !current_card.is_empty()
+func _should_show_remaining_deck_fronts() -> bool:
+	return !round_active and !start_overlay.visible and deck != null and !current_card.is_empty() and remaining_deck_revealed
 
 func _apply_deck_card_back(deck_button: Button) -> void:
-	deck_button.text = ""
+	deck_button.text = "HI\nLO"
 	deck_button.disabled = !awaiting_deck_pick or !round_active
-	deck_button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	deck_button.add_theme_stylebox_override("normal", _make_deck_card_style(Color("1c2a38"), Color(0.862745, 0.901961, 0.866667, 0.22)))
-	deck_button.add_theme_stylebox_override("hover", _make_deck_card_style(Color("254055"), Color(0.952941, 0.945098, 0.831373, 0.55)))
-	deck_button.add_theme_stylebox_override("pressed", _make_deck_card_style(Color("14202b"), Color(0.952941, 0.945098, 0.831373, 0.35)))
-	deck_button.add_theme_stylebox_override("disabled", _make_deck_card_style(Color("1c2a38"), Color(0.862745, 0.901961, 0.866667, 0.12)))
-	deck_button.add_theme_font_size_override("font_size", 12)
+	deck_button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND if awaiting_deck_pick and round_active else Control.CURSOR_ARROW
+	var is_pick_state: bool = awaiting_deck_pick and round_active
+	var base_fill: Color = Color("24575a") if is_pick_state else Color("173246")
+	var hover_fill: Color = Color("2f7376") if is_pick_state else Color("23516f")
+	var pressed_fill: Color = Color("183e40") if is_pick_state else Color("102635")
+	var border_color: Color = Color("ffd166") if is_pick_state else Color(0.952941, 0.945098, 0.831373, 0.24)
+	var disabled_border: Color = Color(0.952941, 0.945098, 0.831373, 0.32) if is_pick_state else Color(0.952941, 0.945098, 0.831373, 0.14)
+	deck_button.add_theme_stylebox_override("normal", _make_deck_card_style(base_fill, border_color))
+	deck_button.add_theme_stylebox_override("hover", _make_deck_card_style(hover_fill, Color("ffe6a7")))
+	deck_button.add_theme_stylebox_override("pressed", _make_deck_card_style(pressed_fill, Color(1.0, 0.901961, 0.654902, 0.6)))
+	deck_button.add_theme_stylebox_override("disabled", _make_deck_card_style(base_fill, disabled_border))
+	deck_button.add_theme_color_override("font_color", Color("f3edd1"))
+	deck_button.add_theme_color_override("font_hover_color", Color("fff7de"))
+	deck_button.add_theme_color_override("font_pressed_color", Color("f3edd1"))
+	deck_button.add_theme_color_override("font_disabled_color", Color(0.952941, 0.945098, 0.831373, 0.55))
+	deck_button.add_theme_font_size_override("font_size", 10)
 
 func _apply_deck_card_front(deck_button: Button, card: Dictionary) -> void:
 	var suit_color: Color = Deck.suit_color(card)
@@ -192,6 +223,83 @@ func _apply_deck_card_front(deck_button: Button, card: Dictionary) -> void:
 	deck_button.add_theme_color_override("font_pressed_color", suit_color)
 	deck_button.add_theme_color_override("font_disabled_color", suit_color)
 	deck_button.add_theme_font_size_override("font_size", 11)
+
+func _start_remaining_deck_reveal() -> void:
+	if remaining_deck_revealed or remaining_deck_reveal_in_progress:
+		return
+	if _is_deck_reveal_cancelled(deck_reveal_generation):
+		return
+	remaining_deck_reveal_in_progress = true
+	_update_deck_label()
+	var generation: int = deck_reveal_generation
+	var cards_snapshot: Array[Dictionary] = deck.cards.duplicate(true)
+	var deck_buttons: Array[Button] = []
+	for child: Node in deck_grid.get_children():
+		var deck_button: Button = child as Button
+		if deck_button != null:
+			deck_buttons.append(deck_button)
+
+	var reveal_count: int = mini(deck_buttons.size(), cards_snapshot.size())
+	for index in range(reveal_count):
+		if _is_deck_reveal_cancelled(generation):
+			_stop_remaining_deck_reveal()
+			return
+		var deck_button: Button = deck_buttons[index]
+		if not is_instance_valid(deck_button):
+			continue
+		var flip_finished: bool = await _animate_deck_card_flip(deck_button, cards_snapshot[index], generation)
+		if not flip_finished and _is_deck_reveal_cancelled(generation):
+			_stop_remaining_deck_reveal()
+			return
+		if index < reveal_count - 1:
+			await get_tree().create_timer(0.02).timeout
+
+	if _is_deck_reveal_cancelled(generation):
+		_stop_remaining_deck_reveal()
+		return
+
+	remaining_deck_reveal_in_progress = false
+	remaining_deck_revealed = true
+	_update_deck_label()
+
+func _animate_deck_card_flip(deck_button: Button, card: Dictionary, generation: int) -> bool:
+	if not is_instance_valid(deck_button) or _is_deck_reveal_cancelled(generation):
+		return false
+	deck_button.pivot_offset = deck_button.custom_minimum_size / 2.0
+	deck_button.scale = Vector2.ONE
+	var close_tween: Tween = create_tween()
+	close_tween.bind_node(deck_button)
+	close_tween.set_trans(Tween.TRANS_CUBIC)
+	close_tween.set_ease(Tween.EASE_IN)
+	close_tween.tween_property(deck_button, "scale", Vector2(0.08, 1.04), 0.05)
+	await close_tween.finished
+	if not is_instance_valid(deck_button) or _is_deck_reveal_cancelled(generation):
+		return false
+
+	_apply_deck_card_front(deck_button, card)
+
+	var open_tween: Tween = create_tween()
+	open_tween.bind_node(deck_button)
+	open_tween.set_trans(Tween.TRANS_BACK)
+	open_tween.set_ease(Tween.EASE_OUT)
+	open_tween.tween_property(deck_button, "scale", Vector2(1.08, 0.98), 0.08)
+	await open_tween.finished
+	if not is_instance_valid(deck_button) or _is_deck_reveal_cancelled(generation):
+		return false
+
+	var settle_tween: Tween = create_tween()
+	settle_tween.bind_node(deck_button)
+	settle_tween.set_trans(Tween.TRANS_SINE)
+	settle_tween.set_ease(Tween.EASE_OUT)
+	settle_tween.tween_property(deck_button, "scale", Vector2.ONE, 0.04)
+	return true
+
+func _is_deck_reveal_cancelled(generation: int) -> bool:
+	return generation != deck_reveal_generation or round_active or start_overlay.visible or deck == null
+
+func _stop_remaining_deck_reveal() -> void:
+	remaining_deck_reveal_in_progress = false
+	_update_deck_label()
 
 func _apply_card_visual(card: Dictionary) -> void:
 	var rank_text: String = Deck.rank_text(card)
@@ -516,6 +624,7 @@ func _finish_round(message: String, won: bool) -> void:
 		subtitle_label.text = "You lost the current round. Try again."
 		_set_result_text(message, RESULT_FAIL)
 	_update_status_labels()
+	call_deferred("_start_remaining_deck_reveal")
 
 func _shake_screen() -> void:
 	if shake_tween != null:

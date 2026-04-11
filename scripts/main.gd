@@ -25,15 +25,19 @@ var remaining_deck_reveal_in_progress: bool = false
 var deck_reveal_generation: int = 0
 var pending_level_intro_message: String = ""
 var shake_tween: Tween
+var bonus_banner_tween: Tween
 var card_sfx_player: AudioStreamPlayer
 var success_sfx_player: AudioStreamPlayer
 var fail_sfx_player: AudioStreamPlayer
 var effects_layer: Control
 var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 
+@onready var background: ColorRect = %Background
 @onready var deck_grid: GridContainer = %DeckGrid
 @onready var deck_label: Label = %DeckLabel
 @onready var subtitle_label: Label = %SubtitleLabel
+@onready var bonus_banner: PanelContainer = %BonusBanner
+@onready var bonus_banner_label: Label = %BonusBannerLabel
 @onready var card_panel: PanelContainer = %CardPanel
 @onready var card_label: Label = %CardLabel
 @onready var card_suit_center: Label = %CardSuitCenter
@@ -62,6 +66,7 @@ var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 @onready var higher_preview_rank_bottom: Label = %HigherPreviewRankBottom
 @onready var higher_preview_suit_bottom: Label = %HigherPreviewSuitBottom
 @onready var result_label: Label = %ResultLabel
+@onready var back_button: Button = %BackButton
 @onready var play_again_button: Button = %PlayAgainButton
 @onready var start_overlay: CenterContainer = %StartOverlay
 @onready var level_overlay: CenterContainer = %LevelOverlay
@@ -76,6 +81,7 @@ func _ready() -> void:
 	rng.randomize()
 	higher_button.pressed.connect(_on_higher)
 	lower_button.pressed.connect(_on_lower)
+	back_button.pressed.connect(_on_back_pressed)
 	play_again_button.pressed.connect(_on_play_again)
 	start_button.pressed.connect(_on_start_pressed)
 	level_continue_button.pressed.connect(_on_level_continue_pressed)
@@ -92,6 +98,7 @@ func start_game() -> void:
 	start_overlay.visible = false
 	level_overlay.visible = false
 	play_again_button.visible = false
+	back_button.visible = false
 	pending_level_intro_message = ""
 	subtitle_label.text = "Build enough correct guesses before the level runs out of draws."
 	_start_level("Run started. %s" % _current_level_brief())
@@ -108,6 +115,7 @@ func _start_level(message: String) -> void:
 	pending_level_intro_message = ""
 	current_card = deck.draw()
 	play_again_button.visible = false
+	back_button.visible = false
 	card_panel.visible = true
 	_apply_card_visual(current_card)
 	_play_card_sound()
@@ -135,6 +143,7 @@ func _show_start_state() -> void:
 	_update_status_labels()
 	subtitle_label.text = "A run-based card game: beat level targets before the draw limit ends."
 	_set_result_text("Press Start to begin.", RESULT_NEUTRAL)
+	back_button.visible = false
 	play_again_button.visible = false
 	_reset_choice_slots()
 	_set_guess_buttons_enabled(false)
@@ -144,6 +153,7 @@ func _update_status_labels() -> void:
 	var active_multiplier: int = 1 if game_state == null else game_state.get_streak_multiplier()
 	score_label.text = "Run: %d  Mult: x%d" % [run_score, active_multiplier]
 	high_score_label.text = "Best: %d" % high_score
+	var bonus_draws: int = 0 if game_state == null else game_state.get_active_bonus_draws()
 	var cards_left: int = _get_cards_left_for_display()
 	if game_state == null:
 		remaining_label.text = "Level: 1  Lives: %d" % GameState.DEFAULT_LIVES
@@ -157,6 +167,8 @@ func _update_status_labels() -> void:
 			game_state.get_level_draw_limit(),
 			game_state.current_streak,
 		]
+	if bonus_draws > 0:
+		remaining_label.text += "  Bonus: +%d draws" % bonus_draws
 	var streak_color: Color = Color("f5f1da")
 	var streak_value: int = 0 if game_state == null else game_state.current_streak
 	if streak_value >= 10:
@@ -164,6 +176,7 @@ func _update_status_labels() -> void:
 	elif streak_value >= 5:
 		streak_color = Color("ffe29a")
 	streak_label.add_theme_color_override("font_color", streak_color)
+	_set_bonus_banner_state(bonus_draws)
 	_update_deck_label()
 	_rebuild_deck_view()
 
@@ -181,6 +194,32 @@ func _current_level_brief() -> String:
 	else:
 		brief += "."
 	return brief
+
+func _set_bonus_banner_state(bonus_draws: int) -> void:
+	var has_bonus: bool = bonus_draws > 0
+	bonus_banner.visible = has_bonus
+	if has_bonus:
+		bonus_banner_label.text = "Bonus Active: +%d draws this level" % bonus_draws
+	else:
+		bonus_banner_label.text = ""
+
+	var table_color: Color = Color("0f703e") if has_bonus else Color("155835")
+	background.color = table_color
+	deck_label.add_theme_color_override("font_color", Color("ffd166") if has_bonus else Color("f5f1da"))
+
+	if bonus_banner_tween != null:
+		bonus_banner_tween.kill()
+		bonus_banner_tween = null
+
+	if not has_bonus:
+		bonus_banner.scale = Vector2.ONE
+		return
+
+	bonus_banner.scale = Vector2.ONE
+	bonus_banner_tween = create_tween()
+	bonus_banner_tween.set_loops()
+	bonus_banner_tween.tween_property(bonus_banner, "scale", Vector2(1.015, 1.015), 0.65)
+	bonus_banner_tween.tween_property(bonus_banner, "scale", Vector2.ONE, 0.65)
 
 func _update_deck_label() -> void:
 	if start_overlay.visible:
@@ -389,6 +428,7 @@ func _set_guess_buttons_enabled(is_enabled: bool) -> void:
 
 func _set_deck_pick_enabled(is_enabled: bool) -> void:
 	awaiting_deck_pick = is_enabled
+	back_button.visible = is_enabled and round_active and !input_locked
 	for child: Node in deck_grid.get_children():
 		var deck_button: Button = child as Button
 		if deck_button != null:
@@ -531,6 +571,16 @@ func guess(player_said_higher: bool) -> void:
 	_apply_empty_center_slot()
 	_set_result_text("Pick any facedown card from the deck.", RESULT_NEUTRAL)
 	_set_deck_pick_enabled(true)
+
+func _on_back_pressed() -> void:
+	if not round_active or input_locked or !awaiting_deck_pick or current_card.is_empty():
+		return
+	_set_deck_pick_enabled(false)
+	_reset_choice_slots()
+	card_panel.visible = true
+	_apply_card_visual(current_card)
+	_set_result_text("Choice canceled. Pick Higher or Lower.", RESULT_NEUTRAL)
+	_set_guess_buttons_enabled(true)
 
 func _on_deck_card_pressed() -> void:
 	if not round_active or input_locked or !awaiting_deck_pick:
@@ -719,6 +769,7 @@ func _finish_run(message: String, won: bool) -> void:
 	pending_level_intro_message = ""
 	_set_guess_buttons_enabled(false)
 	_set_deck_pick_enabled(false)
+	back_button.visible = false
 	play_again_button.visible = true
 	if won:
 		subtitle_label.text = "The run is complete. You can start another one right away."

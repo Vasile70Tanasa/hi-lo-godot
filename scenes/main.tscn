@@ -45,15 +45,13 @@ color = Color(0.0823529, 0.345098, 0.207843, 1)
 
 [node name="GameMargin" type="MarginContainer" parent="."]
 layout_mode = 1
-anchors_preset = 8
-anchor_left = 0.5
-anchor_top = 0.5
-anchor_right = 0.5
-anchor_bottom = 0.5
-offset_left = -250.0
-offset_top = -215.0
-offset_right = 250.0
-offset_bottom = 215.0
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 14.0
+offset_top = 14.0
+offset_right = -14.0
+offset_bottom = -14.0
 grow_horizontal = 2
 grow_vertical = 2
 theme_override_constants/margin_left = 8
@@ -64,8 +62,28 @@ theme_override_constants/margin_bottom = 8
 [node name="GameVBox" type="VBoxContainer" parent="GameMargin"]
 layout_mode = 2
 size_flags_horizontal = 4
-theme_override_constants/separation = 10
-alignment = 1
+size_flags_vertical = 4
+theme_override_constants/separation = 8
+alignment = 0
+
+[node name="DeckSection" type="VBoxContainer" parent="GameMargin/GameVBox"]
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_constants/separation = 5
+
+[node name="DeckLabel" type="Label" parent="GameMargin/GameVBox/DeckSection"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "Deck"
+horizontal_alignment = 1
+
+[node name="DeckGrid" type="GridContainer" parent="GameMargin/GameVBox/DeckSection"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_constants/h_separation = 3
+theme_override_constants/v_separation = 3
+columns = 26
 
 [node name="TopBar" type="GridContainer" parent="GameMargin/GameVBox"]
 layout_mode = 2
@@ -126,19 +144,17 @@ layout_mode = 2
 theme_override_constants/separation = 18
 alignment = 1
 
-[node name="LowerChoiceSlot" type="Control" parent="GameMargin/GameVBox/ComparisonRow"]
-custom_minimum_size = Vector2(118, 154)
+[node name="LowerChoiceSlot" type="VBoxContainer" parent="GameMargin/GameVBox/ComparisonRow"]
+custom_minimum_size = Vector2(118, 202)
 layout_mode = 2
+theme_override_constants/separation = 8
+alignment = 1
 
 [node name="LowerPreviewPanel" type="PanelContainer" parent="GameMargin/GameVBox/ComparisonRow/LowerChoiceSlot"]
 unique_name_in_owner = true
-visible = false
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
+layout_mode = 2
+size_flags_horizontal = 4
+custom_minimum_size = Vector2(118, 154)
 theme_override_styles/panel = SubResource("1")
 
 [node name="LowerPreviewMargin" type="MarginContainer" parent="GameMargin/GameVBox/ComparisonRow/LowerChoiceSlot/LowerPreviewPanel"]
@@ -223,13 +239,9 @@ horizontal_alignment = 2
 
 [node name="LowerButton" type="Button" parent="GameMargin/GameVBox/ComparisonRow/LowerChoiceSlot" unique_id=448270304]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(140, 42)
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
+custom_minimum_size = Vector2(118, 40)
+layout_mode = 2
+size_flags_horizontal = 4
 theme_override_font_sizes/font_size = 18
 text = "Lower"
 
@@ -320,19 +332,17 @@ theme_override_font_sizes/font_size = 18
 text = "?"
 horizontal_alignment = 2
 
-[node name="HigherChoiceSlot" type="Control" parent="GameMargin/GameVBox/ComparisonRow"]
-custom_minimum_size = Vector2(118, 154)
+[node name="HigherChoiceSlot" type="VBoxContainer" parent="GameMargin/GameVBox/ComparisonRow"]
+custom_minimum_size = Vector2(118, 202)
 layout_mode = 2
+theme_override_constants/separation = 8
+alignment = 1
 
 [node name="HigherPreviewPanel" type="PanelContainer" parent="GameMargin/GameVBox/ComparisonRow/HigherChoiceSlot"]
 unique_name_in_owner = true
-visible = false
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
+layout_mode = 2
+size_flags_horizontal = 4
+custom_minimum_size = Vector2(118, 154)
 theme_override_styles/panel = SubResource("1")
 
 [node name="HigherPreviewMargin" type="MarginContainer" parent="GameMargin/GameVBox/ComparisonRow/HigherChoiceSlot/HigherPreviewPanel"]
@@ -417,13 +427,9 @@ horizontal_alignment = 2
 
 [node name="HigherButton" type="Button" parent="GameMargin/GameVBox/ComparisonRow/HigherChoiceSlot" unique_id=1865003226]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(140, 42)
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
+custom_minimum_size = Vector2(118, 40)
+layout_mode = 2
+size_flags_horizontal = 4
 theme_override_font_sizes/font_size = 18
 text = "Higher"
 
@@ -479,7 +485,7 @@ horizontal_alignment = 1
 [node name="StartText" type="Label" parent="StartOverlay/StartPanel/StartMargin/StartVBox"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 14
-text = "See a card, choose Higher or Lower, and a tie discards both cards and deals a new one."
+text = "See a card, choose Higher or Lower, then click a facedown card. A tie discards both cards and deals a new one."
 horizontal_alignment = 1
 autowrap_mode = 3
 

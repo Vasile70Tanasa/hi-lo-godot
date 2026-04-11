@@ -18,6 +18,8 @@ var score: int = 0
 var high_score: int = 0
 var round_active: bool = false
 var input_locked: bool = false
+var awaiting_deck_pick: bool = false
+var pending_guess_higher: bool = false
 var shake_tween: Tween
 var card_sfx_player: AudioStreamPlayer
 var success_sfx_player: AudioStreamPlayer
@@ -25,6 +27,7 @@ var fail_sfx_player: AudioStreamPlayer
 var effects_layer: Control
 var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 
+@onready var deck_grid: GridContainer = %DeckGrid
 @onready var subtitle_label: Label = %SubtitleLabel
 @onready var card_panel: PanelContainer = %CardPanel
 @onready var card_label: Label = %CardLabel
@@ -78,14 +81,17 @@ func start_game() -> void:
 	score = 0
 	round_active = true
 	input_locked = false
+	awaiting_deck_pick = false
+	pending_guess_higher = false
 	current_card = deck.draw()
 	start_overlay.visible = false
 	play_again_button.visible = false
-	subtitle_label.text = "Guess whether the next card will be higher or lower."
+	subtitle_label.text = "Choose Higher or Lower, then click a facedown card."
+	card_panel.visible = true
 	_apply_card_visual(current_card)
 	_play_card_sound()
 	_update_status_labels()
-	_set_result_text("A tie discards both cards and deals a new one.", RESULT_NEUTRAL)
+	_set_result_text("Pick Higher or Lower to choose your guess.", RESULT_NEUTRAL)
 	_reset_choice_slots()
 	_set_guess_buttons_enabled(true)
 
@@ -93,8 +99,11 @@ func _show_start_state() -> void:
 	start_overlay.visible = true
 	round_active = false
 	input_locked = false
+	awaiting_deck_pick = false
+	pending_guess_higher = false
 	current_card = {}
 	card_panel.scale = Vector2.ONE
+	card_panel.visible = true
 	_apply_card_back()
 	score = 0
 	_update_status_labels()
@@ -107,7 +116,7 @@ func _show_start_state() -> void:
 func _update_status_labels() -> void:
 	score_label.text = "Score: %d" % score
 	high_score_label.text = "Best: %d" % high_score
-	var cards_left: int = Deck.TOTAL_CARDS if deck == null or current_card.is_empty() else deck.cards_left()
+	var cards_left: int = _get_cards_left_for_display()
 	remaining_label.text = "Cards left: %d / %d" % [cards_left, Deck.TOTAL_CARDS]
 	streak_label.text = "Streak: %d" % score
 	var streak_color: Color = Color("f5f1da")
@@ -116,11 +125,79 @@ func _update_status_labels() -> void:
 	elif score >= 5:
 		streak_color = Color("ffe29a")
 	streak_label.add_theme_color_override("font_color", streak_color)
+	_rebuild_deck_view()
+
+func _get_cards_left_for_display() -> int:
+	if deck == null or current_card.is_empty():
+		return Deck.TOTAL_CARDS
+	return deck.cards_left()
+
+func _rebuild_deck_view() -> void:
+	for child: Node in deck_grid.get_children():
+		deck_grid.remove_child(child)
+		child.queue_free()
+
+	var cards_left: int = _get_cards_left_for_display()
+	var reveal_remaining_cards: bool = _should_reveal_remaining_deck()
+	for index in range(cards_left):
+		var deck_button: Button = Button.new()
+		deck_button.custom_minimum_size = Vector2(26, 38)
+		deck_button.focus_mode = Control.FOCUS_NONE
+		if reveal_remaining_cards and deck != null and index < deck.cards.size():
+			var remaining_card: Dictionary = deck.cards[index]
+			_apply_deck_card_front(deck_button, remaining_card)
+		else:
+			_apply_deck_card_back(deck_button)
+			deck_button.pressed.connect(_on_deck_card_pressed)
+		deck_grid.add_child(deck_button)
+
+func _make_deck_card_style(fill_color: Color, border_color: Color) -> StyleBoxFlat:
+	var style: StyleBoxFlat = StyleBoxFlat.new()
+	style.bg_color = fill_color
+	style.border_width_left = 1
+	style.border_width_top = 1
+	style.border_width_right = 1
+	style.border_width_bottom = 1
+	style.border_color = border_color
+	style.corner_radius_top_left = 6
+	style.corner_radius_top_right = 6
+	style.corner_radius_bottom_right = 6
+	style.corner_radius_bottom_left = 6
+	return style
+
+func _should_reveal_remaining_deck() -> bool:
+	return !round_active and !start_overlay.visible and deck != null and !current_card.is_empty()
+
+func _apply_deck_card_back(deck_button: Button) -> void:
+	deck_button.text = ""
+	deck_button.disabled = !awaiting_deck_pick or !round_active
+	deck_button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	deck_button.add_theme_stylebox_override("normal", _make_deck_card_style(Color("1c2a38"), Color(0.862745, 0.901961, 0.866667, 0.22)))
+	deck_button.add_theme_stylebox_override("hover", _make_deck_card_style(Color("254055"), Color(0.952941, 0.945098, 0.831373, 0.55)))
+	deck_button.add_theme_stylebox_override("pressed", _make_deck_card_style(Color("14202b"), Color(0.952941, 0.945098, 0.831373, 0.35)))
+	deck_button.add_theme_stylebox_override("disabled", _make_deck_card_style(Color("1c2a38"), Color(0.862745, 0.901961, 0.866667, 0.12)))
+	deck_button.add_theme_font_size_override("font_size", 12)
+
+func _apply_deck_card_front(deck_button: Button, card: Dictionary) -> void:
+	var suit_color: Color = Deck.suit_color(card)
+	deck_button.text = "%s\n%s" % [Deck.rank_text(card), Deck.suit_symbol(card)]
+	deck_button.disabled = true
+	deck_button.mouse_default_cursor_shape = Control.CURSOR_ARROW
+	deck_button.add_theme_stylebox_override("normal", _make_deck_card_style(Color("f7f1df"), Color(0.14902, 0.184314, 0.231373, 0.22)))
+	deck_button.add_theme_stylebox_override("hover", _make_deck_card_style(Color("f7f1df"), Color(0.14902, 0.184314, 0.231373, 0.22)))
+	deck_button.add_theme_stylebox_override("pressed", _make_deck_card_style(Color("f7f1df"), Color(0.14902, 0.184314, 0.231373, 0.22)))
+	deck_button.add_theme_stylebox_override("disabled", _make_deck_card_style(Color("f7f1df"), Color(0.14902, 0.184314, 0.231373, 0.22)))
+	deck_button.add_theme_color_override("font_color", suit_color)
+	deck_button.add_theme_color_override("font_hover_color", suit_color)
+	deck_button.add_theme_color_override("font_pressed_color", suit_color)
+	deck_button.add_theme_color_override("font_disabled_color", suit_color)
+	deck_button.add_theme_font_size_override("font_size", 11)
 
 func _apply_card_visual(card: Dictionary) -> void:
 	var rank_text: String = Deck.rank_text(card)
 	var suit_symbol: String = Deck.suit_symbol(card)
 	var suit_color: Color = Deck.suit_color(card)
+	card_panel.modulate = Color(1.0, 1.0, 1.0, 1.0)
 	card_label.text = rank_text
 	card_suit_center.text = suit_symbol
 	corner_rank_top.text = rank_text
@@ -136,6 +213,7 @@ func _apply_card_visual(card: Dictionary) -> void:
 
 func _apply_card_back() -> void:
 	var back_color: Color = Color("16202a")
+	card_panel.modulate = Color(1.0, 1.0, 1.0, 1.0)
 	card_label.text = "?"
 	card_suit_center.text = "?"
 	corner_rank_top.text = "?"
@@ -157,20 +235,39 @@ func _set_guess_buttons_enabled(is_enabled: bool) -> void:
 	higher_button.disabled = !is_enabled
 	lower_button.disabled = !is_enabled
 
+func _set_deck_pick_enabled(is_enabled: bool) -> void:
+	awaiting_deck_pick = is_enabled
+	for child: Node in deck_grid.get_children():
+		var deck_button: Button = child as Button
+		if deck_button != null:
+			deck_button.disabled = !is_enabled or !round_active
+
 func _reset_choice_slots() -> void:
-	lower_preview_panel.visible = false
-	higher_preview_panel.visible = false
-	lower_button.visible = true
-	higher_button.visible = true
+	_apply_preview_placeholder(
+		lower_preview_panel,
+		lower_preview_rank_top,
+		lower_preview_suit_top,
+		lower_preview_suit_center,
+		lower_preview_rank_center,
+		lower_preview_rank_bottom,
+		lower_preview_suit_bottom
+	)
+	_apply_preview_placeholder(
+		higher_preview_panel,
+		higher_preview_rank_top,
+		higher_preview_suit_top,
+		higher_preview_suit_center,
+		higher_preview_rank_center,
+		higher_preview_rank_bottom,
+		higher_preview_suit_bottom
+	)
 
 func _show_choice_preview(show_higher_side: bool, card: Dictionary) -> void:
-	lower_button.visible = false
-	higher_button.visible = false
-	lower_preview_panel.visible = false
-	higher_preview_panel.visible = false
+	_reset_choice_slots()
 
 	if show_higher_side:
 		_apply_preview_card(
+			higher_preview_panel,
 			card,
 			higher_preview_rank_top,
 			higher_preview_suit_top,
@@ -179,9 +276,9 @@ func _show_choice_preview(show_higher_side: bool, card: Dictionary) -> void:
 			higher_preview_rank_bottom,
 			higher_preview_suit_bottom
 		)
-		higher_preview_panel.visible = true
 	else:
 		_apply_preview_card(
+			lower_preview_panel,
 			card,
 			lower_preview_rank_top,
 			lower_preview_suit_top,
@@ -190,9 +287,9 @@ func _show_choice_preview(show_higher_side: bool, card: Dictionary) -> void:
 			lower_preview_rank_bottom,
 			lower_preview_suit_bottom
 		)
-		lower_preview_panel.visible = true
 
 func _apply_preview_card(
+	panel: PanelContainer,
 	card: Dictionary,
 	rank_top: Label,
 	suit_top: Label,
@@ -204,6 +301,7 @@ func _apply_preview_card(
 	var rank_text: String = Deck.rank_text(card)
 	var suit_symbol: String = Deck.suit_symbol(card)
 	var suit_color: Color = Deck.suit_color(card)
+	panel.modulate = Color(1.0, 1.0, 1.0, 1.0)
 	rank_top.text = rank_text
 	suit_top.text = suit_symbol
 	suit_center.text = suit_symbol
@@ -217,6 +315,47 @@ func _apply_preview_card(
 	rank_bottom.add_theme_color_override("font_color", suit_color)
 	suit_bottom.add_theme_color_override("font_color", suit_color)
 
+func _apply_preview_placeholder(
+	panel: PanelContainer,
+	rank_top: Label,
+	suit_top: Label,
+	suit_center: Label,
+	rank_center: Label,
+	rank_bottom: Label,
+	suit_bottom: Label
+) -> void:
+	var placeholder_color: Color = Color(0.086275, 0.12549, 0.164706, 0.4)
+	panel.modulate = Color(1.0, 1.0, 1.0, 0.42)
+	rank_top.text = ""
+	suit_top.text = ""
+	suit_center.text = ""
+	rank_center.text = ""
+	rank_bottom.text = ""
+	suit_bottom.text = ""
+	rank_top.add_theme_color_override("font_color", placeholder_color)
+	suit_top.add_theme_color_override("font_color", placeholder_color)
+	suit_center.add_theme_color_override("font_color", placeholder_color)
+	rank_center.add_theme_color_override("font_color", placeholder_color)
+	rank_bottom.add_theme_color_override("font_color", placeholder_color)
+	suit_bottom.add_theme_color_override("font_color", placeholder_color)
+
+func _apply_empty_center_slot() -> void:
+	var placeholder_color: Color = Color(0.086275, 0.12549, 0.164706, 0.38)
+	card_panel.visible = true
+	card_panel.modulate = Color(1.0, 1.0, 1.0, 0.45)
+	card_label.text = ""
+	card_suit_center.text = ""
+	corner_rank_top.text = ""
+	corner_suit_top.text = ""
+	corner_rank_bottom.text = ""
+	corner_suit_bottom.text = ""
+	card_label.add_theme_color_override("font_color", placeholder_color)
+	card_suit_center.add_theme_color_override("font_color", placeholder_color)
+	corner_rank_top.add_theme_color_override("font_color", placeholder_color)
+	corner_suit_top.add_theme_color_override("font_color", placeholder_color)
+	corner_rank_bottom.add_theme_color_override("font_color", placeholder_color)
+	corner_suit_bottom.add_theme_color_override("font_color", placeholder_color)
+
 func _refresh_pivots() -> void:
 	card_panel.pivot_offset = card_panel.size / 2.0
 	streak_label.pivot_offset = streak_label.size / 2.0
@@ -228,28 +367,43 @@ func _on_lower() -> void:
 	guess(false)
 
 func guess(player_said_higher: bool) -> void:
-	if not round_active or input_locked:
+	if not round_active or input_locked or awaiting_deck_pick:
+		return
+	if deck.is_empty():
+		_finish_round("You cleared the whole deck! Nice job!", true)
+		return
+
+	pending_guess_higher = player_said_higher
+	_set_guess_buttons_enabled(false)
+	_show_choice_preview(player_said_higher, current_card)
+	_apply_empty_center_slot()
+	_set_result_text("Pick any facedown card from the deck.", RESULT_NEUTRAL)
+	_set_deck_pick_enabled(true)
+
+func _on_deck_card_pressed() -> void:
+	if not round_active or input_locked or !awaiting_deck_pick:
 		return
 	if deck.is_empty():
 		_finish_round("You cleared the whole deck! Nice job!", true)
 		return
 
 	input_locked = true
-	_set_guess_buttons_enabled(false)
+	_set_deck_pick_enabled(false)
 	var previous_card: Dictionary = current_card
 	var previous_value: int = Deck.card_value(previous_card)
-	_show_choice_preview(player_said_higher, previous_card)
 	var next_card: Dictionary = deck.draw()
 	var next_value: int = Deck.card_value(next_card)
+	card_panel.visible = true
 	await _animate_card_reveal(next_card)
 	current_card = next_card
+	_update_status_labels()
 	var comparison_text: String = "%s after %s." % [Deck.card_text(next_card), Deck.card_text(previous_card)]
 
 	if next_value == previous_value:
 		await _handle_tie(next_card)
 		return
 
-	var guessed_right: bool = player_said_higher == (next_value > previous_value)
+	var guessed_right: bool = pending_guess_higher == (next_value > previous_value)
 	if guessed_right:
 		score += 1
 		_update_high_score()
@@ -278,10 +432,11 @@ func _handle_tie(tie_card: Dictionary) -> void:
 		return
 
 	var new_current_card: Dictionary = deck.draw()
+	card_panel.visible = true
 	await _animate_card_reveal(new_current_card)
 	current_card = new_current_card
 	_update_status_labels()
-	_set_result_text("New card dealt. Make your next guess.", RESULT_NEUTRAL)
+	_set_result_text("New card dealt. Pick Higher or Lower again.", RESULT_NEUTRAL)
 
 	if deck.is_empty():
 		_finish_round("No cards left to compare. Final score: %d" % score, true)
@@ -347,7 +502,10 @@ func _animate_streak() -> void:
 func _finish_round(message: String, won: bool) -> void:
 	round_active = false
 	input_locked = false
+	awaiting_deck_pick = false
+	pending_guess_higher = false
 	_set_guess_buttons_enabled(false)
+	_set_deck_pick_enabled(false)
 	play_again_button.visible = true
 	if won:
 		subtitle_label.text = "The round is over. You can start another one right away."

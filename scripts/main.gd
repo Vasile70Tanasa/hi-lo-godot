@@ -13,8 +13,8 @@ const MEDIUM_STREAK_THRESHOLD := 5
 const HIGH_STREAK_THRESHOLD := 10
 
 var deck: Deck
+var game_state: GameState
 var current_card: Dictionary = {}
-var score: int = 0
 var high_score: int = 0
 var round_active: bool = false
 var input_locked: bool = false
@@ -23,6 +23,7 @@ var pending_guess_higher: bool = false
 var remaining_deck_revealed: bool = false
 var remaining_deck_reveal_in_progress: bool = false
 var deck_reveal_generation: int = 0
+var pending_level_intro_message: String = ""
 var shake_tween: Tween
 var card_sfx_player: AudioStreamPlayer
 var success_sfx_player: AudioStreamPlayer
@@ -63,6 +64,10 @@ var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 @onready var result_label: Label = %ResultLabel
 @onready var play_again_button: Button = %PlayAgainButton
 @onready var start_overlay: CenterContainer = %StartOverlay
+@onready var level_overlay: CenterContainer = %LevelOverlay
+@onready var level_title: Label = %LevelTitle
+@onready var level_text: Label = %LevelText
+@onready var level_continue_button: Button = %LevelContinueButton
 @onready var start_button: Button = %StartButton
 
 func _ready() -> void:
@@ -73,6 +78,7 @@ func _ready() -> void:
 	lower_button.pressed.connect(_on_lower)
 	play_again_button.pressed.connect(_on_play_again)
 	start_button.pressed.connect(_on_start_pressed)
+	level_continue_button.pressed.connect(_on_level_continue_pressed)
 	card_panel.resized.connect(_refresh_pivots)
 	streak_label.resized.connect(_refresh_pivots)
 	high_score = _load_high_score()
@@ -82,23 +88,31 @@ func _ready() -> void:
 
 func start_game() -> void:
 	deck_reveal_generation += 1
+	game_state = GameState.new()
+	start_overlay.visible = false
+	level_overlay.visible = false
+	play_again_button.visible = false
+	pending_level_intro_message = ""
+	subtitle_label.text = "Build enough correct guesses before the level runs out of draws."
+	_start_level("Run started. %s" % _current_level_brief())
+
+func _start_level(message: String) -> void:
 	deck = Deck.new()
-	score = 0
 	round_active = true
 	input_locked = false
 	awaiting_deck_pick = false
 	pending_guess_higher = false
 	remaining_deck_revealed = false
 	remaining_deck_reveal_in_progress = false
+	level_overlay.visible = false
+	pending_level_intro_message = ""
 	current_card = deck.draw()
-	start_overlay.visible = false
 	play_again_button.visible = false
-	subtitle_label.text = "Choose Higher or Lower, then click a facedown card."
 	card_panel.visible = true
 	_apply_card_visual(current_card)
 	_play_card_sound()
 	_update_status_labels()
-	_set_result_text("Pick Higher or Lower to choose your guess.", RESULT_NEUTRAL)
+	_set_result_text(message, RESULT_NEUTRAL)
 	_reset_choice_slots()
 	_set_guess_buttons_enabled(true)
 
@@ -111,32 +125,56 @@ func _show_start_state() -> void:
 	pending_guess_higher = false
 	remaining_deck_revealed = false
 	remaining_deck_reveal_in_progress = false
+	level_overlay.visible = false
+	pending_level_intro_message = ""
+	game_state = null
 	current_card = {}
 	card_panel.scale = Vector2.ONE
 	card_panel.visible = true
 	_apply_card_back()
-	score = 0
 	_update_status_labels()
-	subtitle_label.text = "A small Godot game for practicing scenes, UI, and scripts."
+	subtitle_label.text = "A run-based card game: beat level targets before the draw limit ends."
 	_set_result_text("Press Start to begin.", RESULT_NEUTRAL)
 	play_again_button.visible = false
 	_reset_choice_slots()
 	_set_guess_buttons_enabled(false)
 
 func _update_status_labels() -> void:
-	score_label.text = "Score: %d" % score
+	var run_score: int = 0 if game_state == null else game_state.run_score
+	var active_multiplier: int = 1 if game_state == null else game_state.get_streak_multiplier()
+	score_label.text = "Run: %d  Mult: x%d" % [run_score, active_multiplier]
 	high_score_label.text = "Best: %d" % high_score
 	var cards_left: int = _get_cards_left_for_display()
-	remaining_label.text = "Cards left: %d / %d" % [cards_left, Deck.TOTAL_CARDS]
-	streak_label.text = "Streak: %d" % score
+	if game_state == null:
+		remaining_label.text = "Level: 1  Lives: %d" % GameState.DEFAULT_LIVES
+		streak_label.text = "Goal: 0 / 5  Draws: 0 / 10"
+	else:
+		remaining_label.text = "Level: %d  Lives: %d" % [game_state.get_level_number(), game_state.lives]
+		streak_label.text = "Goal: %d / %d  Draws: %d / %d  Streak: %d" % [
+			game_state.level_score,
+			game_state.get_level_target(),
+			game_state.draws_used,
+			game_state.get_level_draw_limit(),
+			game_state.current_streak,
+		]
 	var streak_color: Color = Color("f5f1da")
-	if score >= 10:
+	var streak_value: int = 0 if game_state == null else game_state.current_streak
+	if streak_value >= 10:
 		streak_color = Color("ffd166")
-	elif score >= 5:
+	elif streak_value >= 5:
 		streak_color = Color("ffe29a")
 	streak_label.add_theme_color_override("font_color", streak_color)
 	_update_deck_label()
 	_rebuild_deck_view()
+
+func _current_level_brief() -> String:
+	if game_state == null:
+		return ""
+	return "Level %d: reach %d correct picks in %d draws." % [
+		game_state.get_level_number(),
+		game_state.get_level_target(),
+		game_state.get_level_draw_limit(),
+	]
 
 func _update_deck_label() -> void:
 	if start_overlay.visible:
@@ -478,7 +516,7 @@ func guess(player_said_higher: bool) -> void:
 	if not round_active or input_locked or awaiting_deck_pick:
 		return
 	if deck.is_empty():
-		_finish_round("You cleared the whole deck! Nice job!", true)
+		_finish_run("The deck ran out unexpectedly. Final run: %d" % _get_run_score(), false)
 		return
 
 	pending_guess_higher = player_said_higher
@@ -492,7 +530,7 @@ func _on_deck_card_pressed() -> void:
 	if not round_active or input_locked or !awaiting_deck_pick:
 		return
 	if deck.is_empty():
-		_finish_round("You cleared the whole deck! Nice job!", true)
+		_finish_run("The deck ran out unexpectedly. Final run: %d" % _get_run_score(), false)
 		return
 
 	input_locked = true
@@ -513,30 +551,47 @@ func _on_deck_card_pressed() -> void:
 
 	var guessed_right: bool = pending_guess_higher == (next_value > previous_value)
 	if guessed_right:
-		score += 1
+		var correct_outcome: Dictionary = game_state.resolve_correct_guess()
 		_update_high_score()
 		_update_status_labels()
 		_play_success_sound()
-		_set_result_text("Correct! %s" % comparison_text, RESULT_SUCCESS)
+		var awarded_points: int = int(correct_outcome.get("awarded_points", 1))
+		var multiplier: int = int(correct_outcome.get("multiplier", 1))
+		var reward_text: String = "+%d points" % awarded_points
+		if awarded_points == 1:
+			reward_text = "+1 point"
+		if multiplier > 1:
+			reward_text += " (x%d streak)" % multiplier
+		_set_result_text("Correct! %s %s." % [comparison_text, reward_text], RESULT_SUCCESS)
 		_animate_streak()
 		_emit_streak_particles()
-		if deck.is_empty():
-			_finish_round("You emptied the deck! Final score: %d" % score, true)
+		if await _handle_level_outcome(correct_outcome):
 			return
 		await get_tree().create_timer(0.55).timeout
 		_reset_choice_slots()
 		input_locked = false
 		_set_guess_buttons_enabled(true)
 	else:
-		_finish_round("Wrong! %s Final score: %d" % [comparison_text, score], false)
+		var wrong_outcome: Dictionary = game_state.resolve_wrong_guess()
+		_update_status_labels()
+		_set_result_text("Wrong! %s" % comparison_text, RESULT_FAIL)
+		if await _handle_level_outcome(wrong_outcome):
+			return
+		await get_tree().create_timer(0.55).timeout
+		_reset_choice_slots()
+		input_locked = false
+		_set_guess_buttons_enabled(true)
 
 func _handle_tie(tie_card: Dictionary) -> void:
+	var tie_outcome: Dictionary = game_state.resolve_tie()
 	_update_status_labels()
 	_set_result_text("Tie on %s. Both cards are discarded." % Deck.card_text(tie_card), RESULT_NEUTRAL)
+	if await _handle_level_outcome(tie_outcome):
+		return
 	await get_tree().create_timer(0.45).timeout
 
 	if deck.is_empty():
-		_finish_round("No cards left to continue. Final score: %d" % score, true)
+		_finish_run("The deck ran out unexpectedly. Final run: %d" % _get_run_score(), false)
 		return
 
 	var new_current_card: Dictionary = deck.draw()
@@ -547,12 +602,55 @@ func _handle_tie(tie_card: Dictionary) -> void:
 	_set_result_text("New card dealt. Pick Higher or Lower again.", RESULT_NEUTRAL)
 
 	if deck.is_empty():
-		_finish_round("No cards left to compare. Final score: %d" % score, true)
+		_finish_run("The deck ran out unexpectedly. Final run: %d" % _get_run_score(), false)
 		return
 
 	_reset_choice_slots()
 	input_locked = false
 	_set_guess_buttons_enabled(true)
+
+func _handle_level_outcome(outcome: Dictionary) -> bool:
+	if not bool(outcome.get("level_completed", false)) and not bool(outcome.get("level_failed", false)):
+		return false
+
+	round_active = false
+	input_locked = true
+	awaiting_deck_pick = false
+	_set_guess_buttons_enabled(false)
+	_set_deck_pick_enabled(false)
+	_reset_choice_slots()
+
+	if bool(outcome.get("level_completed", false)):
+		var cleared_level_number: int = int(outcome.get("level_number", game_state.get_level_number() - 1))
+		_show_level_clear_overlay(cleared_level_number)
+		return true
+
+	if bool(outcome.get("run_over", false)):
+		_finish_run(
+			"Level %d failed. No lives left. Final run: %d" % [int(outcome.get("level_number", game_state.get_level_number())), _get_run_score()],
+			false
+		)
+		return true
+
+	_play_fail_sound()
+	_shake_screen()
+	subtitle_label.text = "You missed the level target, but the run is still alive."
+	_set_result_text(
+		"Level %d failed. Lives left: %d. Retry the same level." % [
+			int(outcome.get("level_number", game_state.get_level_number())),
+			int(outcome.get("lives_left", game_state.lives)),
+		],
+		RESULT_FAIL
+	)
+	await get_tree().create_timer(1.1).timeout
+	if start_overlay.visible or game_state == null:
+		return true
+	subtitle_label.text = "Build enough correct guesses before the level runs out of draws."
+	_start_level("Retry Level %d. %s" % [game_state.get_level_number(), _current_level_brief()])
+	return true
+
+func _get_run_score() -> int:
+	return 0 if game_state == null else game_state.run_score
 
 func _animate_card_reveal(card: Dictionary) -> void:
 	_refresh_pivots()
@@ -607,24 +705,49 @@ func _animate_streak() -> void:
 	tween.tween_property(streak_label, "scale", Vector2(1.12, 1.12), 0.08)
 	tween.tween_property(streak_label, "scale", Vector2.ONE, 0.1)
 
-func _finish_round(message: String, won: bool) -> void:
+func _finish_run(message: String, won: bool) -> void:
 	round_active = false
 	input_locked = false
 	awaiting_deck_pick = false
 	pending_guess_higher = false
+	level_overlay.visible = false
+	pending_level_intro_message = ""
 	_set_guess_buttons_enabled(false)
 	_set_deck_pick_enabled(false)
 	play_again_button.visible = true
 	if won:
-		subtitle_label.text = "The round is over. You can start another one right away."
+		subtitle_label.text = "The run is complete. You can start another one right away."
 		_set_result_text(message, RESULT_WIN)
 	else:
 		_play_fail_sound()
 		_shake_screen()
-		subtitle_label.text = "You lost the current round. Try again."
+		subtitle_label.text = "The run is over. Try again."
 		_set_result_text(message, RESULT_FAIL)
 	_update_status_labels()
 	call_deferred("_start_remaining_deck_reveal")
+
+func _show_level_clear_overlay(cleared_level_number: int) -> void:
+	if game_state == null:
+		return
+	var next_level_number: int = game_state.get_level_number()
+	level_title.text = "Level %d Cleared" % cleared_level_number
+	level_text.text = "Run score: %d\nLives left: %d\n\nNext up: reach %d points in %d draws." % [
+		game_state.run_score,
+		game_state.lives,
+		game_state.get_level_target(),
+		game_state.get_level_draw_limit(),
+	]
+	level_continue_button.text = "Start Level %d" % next_level_number
+	pending_level_intro_message = "Level %d begins. %s" % [next_level_number, _current_level_brief()]
+	subtitle_label.text = "Take a breath, then continue when you're ready."
+	_set_result_text("Strong round. You're moving up.", RESULT_WIN)
+	level_overlay.visible = true
+
+func _on_level_continue_pressed() -> void:
+	if game_state == null or pending_level_intro_message.is_empty():
+		return
+	subtitle_label.text = "Build enough correct guesses before the level runs out of draws."
+	_start_level(pending_level_intro_message)
 
 func _shake_screen() -> void:
 	if shake_tween != null:
@@ -723,10 +846,11 @@ func _push_tone_segment(
 		playback.push_frame(Vector2(sample, sample))
 
 func _emit_streak_particles() -> void:
-	if score < MEDIUM_STREAK_THRESHOLD or effects_layer == null:
+	var streak_value: int = 0 if game_state == null else game_state.current_streak
+	if streak_value < MEDIUM_STREAK_THRESHOLD or effects_layer == null:
 		return
 
-	var is_big_streak: bool = score >= HIGH_STREAK_THRESHOLD
+	var is_big_streak: bool = streak_value >= HIGH_STREAK_THRESHOLD
 	var particle_count: int = 26 if is_big_streak else 14
 	var origin: Vector2 = streak_label.get_global_rect().get_center() - get_global_rect().position
 	var palette: Array[Color] = [
@@ -768,9 +892,10 @@ func _emit_streak_particles() -> void:
 		tween.chain().tween_callback(particle.queue_free)
 
 func _update_high_score() -> void:
-	if score <= high_score:
+	var run_score: int = _get_run_score()
+	if run_score <= high_score:
 		return
-	high_score = score
+	high_score = run_score
 	var file: FileAccess = FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if file != null:
 		file.store_string(JSON.stringify({"high_score": high_score}))
@@ -781,7 +906,7 @@ func _load_high_score() -> int:
 	var file: FileAccess = FileAccess.open(SAVE_PATH, FileAccess.READ)
 	if file == null:
 		return 0
-	var parsed = JSON.parse_string(file.get_as_text())
+	var parsed: Variant = JSON.parse_string(file.get_as_text())
 	if typeof(parsed) != TYPE_DICTIONARY:
 		return 0
 	return int(parsed.get("high_score", 0))

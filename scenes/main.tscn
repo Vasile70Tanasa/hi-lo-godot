@@ -136,7 +136,7 @@ vertical_alignment = 1
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 14
-text = "Guess whether the next card will be higher or lower."
+text = "Beat the level target before you run out of draws."
 horizontal_alignment = 1
 autowrap_mode = 3
 
@@ -460,6 +460,56 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
+[node name="LevelOverlay" type="CenterContainer" parent="."]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="LevelPanel" type="PanelContainer" parent="LevelOverlay"]
+custom_minimum_size = Vector2(360, 210)
+layout_mode = 2
+theme_override_styles/panel = SubResource("2")
+
+[node name="LevelMargin" type="MarginContainer" parent="LevelOverlay/LevelPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 22
+theme_override_constants/margin_top = 22
+theme_override_constants/margin_right = 22
+theme_override_constants/margin_bottom = 22
+
+[node name="LevelVBox" type="VBoxContainer" parent="LevelOverlay/LevelPanel/LevelMargin"]
+layout_mode = 2
+theme_override_constants/separation = 10
+alignment = 1
+
+[node name="LevelTitle" type="Label" parent="LevelOverlay/LevelPanel/LevelMargin/LevelVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "Level Cleared"
+horizontal_alignment = 1
+
+[node name="LevelText" type="Label" parent="LevelOverlay/LevelPanel/LevelMargin/LevelVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "Level summary"
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="LevelContinueButton" type="Button" parent="LevelOverlay/LevelPanel/LevelMargin/LevelVBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(172, 42)
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_font_sizes/font_size = 18
+text = "Continue"
+
 [node name="StartPanel" type="PanelContainer" parent="StartOverlay"]
 custom_minimum_size = Vector2(320, 180)
 layout_mode = 2
@@ -486,7 +536,7 @@ horizontal_alignment = 1
 [node name="StartText" type="Label" parent="StartOverlay/StartPanel/StartMargin/StartVBox"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 14
-text = "See a card, choose Higher or Lower, then click a facedown card. A tie discards both cards and deals a new one."
+text = "You have 3 lives. Clear each level by reaching the target score before the draw limit runs out."
 horizontal_alignment = 1
 autowrap_mode = 3
 

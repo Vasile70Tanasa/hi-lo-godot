@@ -536,7 +536,7 @@ horizontal_alignment = 1
 [node name="StartText" type="Label" parent="StartOverlay/StartPanel/StartMargin/StartVBox"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 14
-text = "You have 3 lives. Clear each level by reaching the target score before the draw limit runs out."
+text = "You have 3 lives. Clear each level before the draw limit runs out. Every 3 cleared levels, the next level gets +2 bonus draws."
 horizontal_alignment = 1
 autowrap_mode = 3
 

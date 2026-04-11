@@ -4,11 +4,13 @@ extends RefCounted
 const DEFAULT_LIVES := 3
 const LEVEL_CONFIGS: Array[Dictionary] = [
 	{"target": 5, "draw_limit": 10},
-	{"target": 6, "draw_limit": 10},
-	{"target": 7, "draw_limit": 11},
-	{"target": 8, "draw_limit": 12},
-	{"target": 9, "draw_limit": 12},
+	{"target": 6, "draw_limit": 9},
+	{"target": 7, "draw_limit": 8},
+	{"target": 8, "draw_limit": 8},
+	{"target": 9, "draw_limit": 7},
 ]
+const NEXT_LEVEL_BONUS_DRAWS := 2
+const BONUS_UNLOCK_INTERVAL := 3
 
 var lives: int = DEFAULT_LIVES
 var level_index: int = 0
@@ -16,6 +18,8 @@ var run_score: int = 0
 var level_score: int = 0
 var draws_used: int = 0
 var current_streak: int = 0
+var active_bonus_draws: int = 0
+var queued_bonus_draws: int = 0
 
 func _init() -> void:
 	start_new_run()
@@ -24,6 +28,8 @@ func start_new_run() -> void:
 	lives = DEFAULT_LIVES
 	level_index = 0
 	run_score = 0
+	active_bonus_draws = 0
+	queued_bonus_draws = 0
 	_reset_level_progress()
 
 func get_level_number() -> int:
@@ -33,7 +39,13 @@ func get_level_target() -> int:
 	return int(get_current_level_config().get("target", 5))
 
 func get_level_draw_limit() -> int:
+	return get_base_level_draw_limit() + active_bonus_draws
+
+func get_base_level_draw_limit() -> int:
 	return int(get_current_level_config().get("draw_limit", 10))
+
+func get_active_bonus_draws() -> int:
+	return active_bonus_draws
 
 func get_current_level_config() -> Dictionary:
 	if level_index < LEVEL_CONFIGS.size():
@@ -42,7 +54,7 @@ func get_current_level_config() -> Dictionary:
 	var extra_level_index: int = level_index - LEVEL_CONFIGS.size()
 	return {
 		"target": 10 + extra_level_index,
-		"draw_limit": 13 + int(extra_level_index / 2),
+		"draw_limit": maxi(7 - int((extra_level_index + 1) / 2), 5),
 	}
 
 func get_streak_multiplier() -> int:
@@ -82,14 +94,23 @@ func _evaluate_attempt(was_tie: bool, awarded_points: int) -> Dictionary:
 		"advanced_level": false,
 		"level_number": get_level_number(),
 		"lives_left": lives,
+		"bonus_unlocked": false,
+		"next_level_bonus_draws": active_bonus_draws,
 	}
 
 	if level_score >= get_level_target():
+		var cleared_level_number: int = get_level_number()
+		if cleared_level_number % BONUS_UNLOCK_INTERVAL == 0:
+			queued_bonus_draws = NEXT_LEVEL_BONUS_DRAWS
+			result["bonus_unlocked"] = true
 		level_index += 1
+		active_bonus_draws = queued_bonus_draws
+		queued_bonus_draws = 0
 		result["level_completed"] = true
 		result["advanced_level"] = true
 		result["next_level_number"] = get_level_number()
-		result["level_number"] = level_index
+		result["level_number"] = cleared_level_number
+		result["next_level_bonus_draws"] = active_bonus_draws
 		_reset_level_progress()
 		return result
 

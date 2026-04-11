@@ -170,11 +170,17 @@ func _update_status_labels() -> void:
 func _current_level_brief() -> String:
 	if game_state == null:
 		return ""
-	return "Level %d: reach %d correct picks in %d draws." % [
+	var brief: String = "Level %d: reach %d points in %d draws" % [
 		game_state.get_level_number(),
 		game_state.get_level_target(),
 		game_state.get_level_draw_limit(),
 	]
+	var bonus_draws: int = game_state.get_active_bonus_draws()
+	if bonus_draws > 0:
+		brief += " (%d bonus draws active)." % bonus_draws
+	else:
+		brief += "."
+	return brief
 
 func _update_deck_label() -> void:
 	if start_overlay.visible:
@@ -621,8 +627,7 @@ func _handle_level_outcome(outcome: Dictionary) -> bool:
 	_reset_choice_slots()
 
 	if bool(outcome.get("level_completed", false)):
-		var cleared_level_number: int = int(outcome.get("level_number", game_state.get_level_number() - 1))
-		_show_level_clear_overlay(cleared_level_number)
+		_show_level_clear_overlay(outcome)
 		return true
 
 	if bool(outcome.get("run_over", false)):
@@ -726,10 +731,13 @@ func _finish_run(message: String, won: bool) -> void:
 	_update_status_labels()
 	call_deferred("_start_remaining_deck_reveal")
 
-func _show_level_clear_overlay(cleared_level_number: int) -> void:
+func _show_level_clear_overlay(outcome: Dictionary) -> void:
 	if game_state == null:
 		return
-	var next_level_number: int = game_state.get_level_number()
+	var cleared_level_number: int = int(outcome.get("level_number", game_state.get_level_number() - 1))
+	var next_level_number: int = int(outcome.get("next_level_number", game_state.get_level_number()))
+	var next_level_bonus_draws: int = int(outcome.get("next_level_bonus_draws", game_state.get_active_bonus_draws()))
+	var bonus_unlocked: bool = bool(outcome.get("bonus_unlocked", false))
 	level_title.text = "Level %d Cleared" % cleared_level_number
 	level_text.text = "Run score: %d\nLives left: %d\n\nNext up: reach %d points in %d draws." % [
 		game_state.run_score,
@@ -737,10 +745,17 @@ func _show_level_clear_overlay(cleared_level_number: int) -> void:
 		game_state.get_level_target(),
 		game_state.get_level_draw_limit(),
 	]
+	if next_level_bonus_draws > 0:
+		level_text.text += "\nBonus active: +%d draws for Level %d." % [next_level_bonus_draws, next_level_number]
+	elif bonus_unlocked:
+		level_text.text += "\nBonus unlocked for the next level."
 	level_continue_button.text = "Start Level %d" % next_level_number
 	pending_level_intro_message = "Level %d begins. %s" % [next_level_number, _current_level_brief()]
 	subtitle_label.text = "Take a breath, then continue when you're ready."
-	_set_result_text("Strong round. You're moving up.", RESULT_WIN)
+	if bonus_unlocked:
+		_set_result_text("Strong round. Reward unlocked: +2 draws for the next level.", RESULT_WIN)
+	else:
+		_set_result_text("Strong round. You're moving up.", RESULT_WIN)
 	level_overlay.visible = true
 
 func _on_level_continue_pressed() -> void:

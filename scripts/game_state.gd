@@ -2,12 +2,20 @@ class_name GameState
 extends RefCounted
 
 const DEFAULT_LIVES := 3
+const MAX_LIVES := 4
+const MODIFIER_NONE := ""
+const MODIFIER_ROYAL_BONUS := "royal_bonus"
+const MODIFIER_BLACKOUT := "blackout"
+const REWARD_NONE := ""
+const REWARD_LIFE := "life"
+const REWARD_DRAWS := "draws"
 const LEVEL_CONFIGS: Array[Dictionary] = [
 	{"target": 5, "draw_limit": 10},
 	{"target": 6, "draw_limit": 9},
-	{"target": 7, "draw_limit": 8},
+	{"target": 7, "draw_limit": 8, "modifier": MODIFIER_ROYAL_BONUS},
 	{"target": 8, "draw_limit": 8},
-	{"target": 9, "draw_limit": 7},
+	{"target": 9, "draw_limit": 7, "modifier": MODIFIER_ROYAL_BONUS},
+	{"target": 8, "draw_limit": 10, "modifier": MODIFIER_BLACKOUT},
 ]
 const NEXT_LEVEL_BONUS_DRAWS := 2
 const BONUS_UNLOCK_INTERVAL := 3
@@ -19,7 +27,7 @@ var level_score: int = 0
 var draws_used: int = 0
 var current_streak: int = 0
 var active_bonus_draws: int = 0
-var queued_bonus_draws: int = 0
+var reward_choice_pending: bool = false
 
 func _init() -> void:
 	start_new_run()
@@ -29,7 +37,7 @@ func start_new_run() -> void:
 	level_index = 0
 	run_score = 0
 	active_bonus_draws = 0
-	queued_bonus_draws = 0
+	reward_choice_pending = false
 	_reset_level_progress()
 
 func get_level_number() -> int:
@@ -41,11 +49,74 @@ func get_level_target() -> int:
 func get_level_draw_limit() -> int:
 	return get_base_level_draw_limit() + active_bonus_draws
 
+func get_level_modifier() -> String:
+	return String(get_current_level_config().get("modifier", MODIFIER_NONE))
+
+func get_level_modifier_label() -> String:
+	match get_level_modifier():
+		MODIFIER_BLACKOUT:
+			return "Blackout"
+		MODIFIER_ROYAL_BONUS:
+			return "Royal Bonus"
+		_:
+			return ""
+
+func get_level_modifier_description() -> String:
+	match get_level_modifier():
+		MODIFIER_BLACKOUT:
+			return "Only black revealed cards score. Correct red cards give 0 points."
+		MODIFIER_ROYAL_BONUS:
+			return "Correct guesses on J, Q, K, or A give +1 extra point."
+		_:
+			return ""
+
 func get_base_level_draw_limit() -> int:
 	return int(get_current_level_config().get("draw_limit", 10))
 
 func get_active_bonus_draws() -> int:
 	return active_bonus_draws
+
+func has_pending_reward_choice() -> bool:
+	return reward_choice_pending
+
+func can_gain_life() -> bool:
+	return lives < MAX_LIVES
+
+func apply_reward_choice(reward_id: String) -> Dictionary:
+	if not reward_choice_pending:
+		return {
+			"reward_id": REWARD_NONE,
+			"label": "",
+			"applied": false,
+		}
+
+	var result: Dictionary = {
+		"reward_id": reward_id,
+		"label": "",
+		"applied": false,
+	}
+	active_bonus_draws = 0
+
+	match reward_id:
+		REWARD_LIFE:
+			if can_gain_life():
+				lives += 1
+				result["label"] = "+1 Life"
+				result["applied"] = true
+			else:
+				result["label"] = "Lives are already full"
+		REWARD_DRAWS:
+			active_bonus_draws = NEXT_LEVEL_BONUS_DRAWS
+			result["label"] = "+2 Draws"
+			result["applied"] = true
+		_:
+			result["reward_id"] = REWARD_NONE
+
+	if bool(result.get("applied", false)):
+		reward_choice_pending = false
+	result["lives"] = lives
+	result["next_level_bonus_draws"] = active_bonus_draws
+	return result
 
 func get_current_level_config() -> Dictionary:
 	if level_index < LEVEL_CONFIGS.size():
@@ -64,13 +135,22 @@ func get_streak_multiplier() -> int:
 		return 2
 	return 1
 
-func resolve_correct_guess() -> Dictionary:
+func resolve_correct_guess(revealed_card: Dictionary) -> Dictionary:
 	draws_used += 1
 	current_streak += 1
-	var awarded_points: int = get_streak_multiplier()
+	var streak_points: int = get_streak_multiplier()
+	var modifier_result: Dictionary = _get_correct_guess_modifier_result(revealed_card, streak_points)
+	var modifier_bonus: int = int(modifier_result.get("modifier_bonus", 0))
+	var awarded_points: int = int(modifier_result.get("awarded_points", streak_points))
 	level_score += awarded_points
 	run_score += awarded_points
-	return _evaluate_attempt(false, awarded_points)
+	var result: Dictionary = _evaluate_attempt(false, awarded_points)
+	result["streak_points"] = streak_points
+	result["modifier_bonus"] = modifier_bonus
+	result["modifier_name"] = get_level_modifier_label()
+	result["modifier_blocked"] = bool(modifier_result.get("modifier_blocked", false))
+	result["modifier_effect_text"] = String(modifier_result.get("modifier_effect_text", ""))
+	return result
 
 func resolve_wrong_guess() -> Dictionary:
 	draws_used += 1
@@ -87,6 +167,7 @@ func _evaluate_attempt(was_tie: bool, awarded_points: int) -> Dictionary:
 		"was_tie": was_tie,
 		"awarded_points": awarded_points,
 		"multiplier": get_streak_multiplier(),
+		"modifier_name": get_level_modifier_label(),
 		"level_completed": false,
 		"level_failed": false,
 		"life_lost": false,
@@ -94,23 +175,22 @@ func _evaluate_attempt(was_tie: bool, awarded_points: int) -> Dictionary:
 		"advanced_level": false,
 		"level_number": get_level_number(),
 		"lives_left": lives,
-		"bonus_unlocked": false,
-		"next_level_bonus_draws": active_bonus_draws,
+		"reward_choice_available": false,
+		"next_level_bonus_draws": 0,
 	}
 
 	if level_score >= get_level_target():
 		var cleared_level_number: int = get_level_number()
-		if cleared_level_number % BONUS_UNLOCK_INTERVAL == 0:
-			queued_bonus_draws = NEXT_LEVEL_BONUS_DRAWS
-			result["bonus_unlocked"] = true
+		active_bonus_draws = 0
 		level_index += 1
-		active_bonus_draws = queued_bonus_draws
-		queued_bonus_draws = 0
+		if cleared_level_number % BONUS_UNLOCK_INTERVAL == 0:
+			reward_choice_pending = true
+			result["reward_choice_available"] = true
 		result["level_completed"] = true
 		result["advanced_level"] = true
 		result["next_level_number"] = get_level_number()
 		result["level_number"] = cleared_level_number
-		result["next_level_bonus_draws"] = active_bonus_draws
+		result["next_level_bonus_draws"] = 0
 		_reset_level_progress()
 		return result
 
@@ -125,6 +205,30 @@ func _evaluate_attempt(was_tie: bool, awarded_points: int) -> Dictionary:
 			_reset_level_progress()
 		return result
 
+	return result
+
+func _get_correct_guess_modifier_result(revealed_card: Dictionary, streak_points: int) -> Dictionary:
+	var result: Dictionary = {
+		"awarded_points": streak_points,
+		"modifier_bonus": 0,
+		"modifier_blocked": false,
+		"modifier_effect_text": "",
+	}
+	match get_level_modifier():
+		MODIFIER_BLACKOUT:
+			var suit: String = String(revealed_card.get("suit", ""))
+			if suit == "hearts" or suit == "diamonds":
+				result["awarded_points"] = 0
+				result["modifier_blocked"] = true
+				result["modifier_effect_text"] = "Blackout blocked the score on a red card"
+		MODIFIER_ROYAL_BONUS:
+			var rank: int = int(revealed_card.get("rank", 0))
+			if rank == 1 or rank >= 11:
+				result["modifier_bonus"] = 1
+				result["awarded_points"] = streak_points + 1
+				result["modifier_effect_text"] = "+1 Royal Bonus"
+		_:
+			pass
 	return result
 
 func _reset_level_progress() -> void:

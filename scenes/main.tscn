@@ -514,7 +514,7 @@ grow_horizontal = 2
 grow_vertical = 2
 
 [node name="LevelPanel" type="PanelContainer" parent="LevelOverlay"]
-custom_minimum_size = Vector2(360, 210)
+custom_minimum_size = Vector2(380, 270)
 layout_mode = 2
 theme_override_styles/panel = SubResource("2")
 
@@ -542,6 +542,36 @@ unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 14
 text = "Level summary"
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="RewardChoiceRow" type="HBoxContainer" parent="LevelOverlay/LevelPanel/LevelMargin/LevelVBox"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 10
+alignment = 1
+
+[node name="RewardLifeButton" type="Button" parent="LevelOverlay/LevelPanel/LevelMargin/LevelVBox/RewardChoiceRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(120, 40)
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = "+1 Life"
+
+[node name="RewardDrawsButton" type="Button" parent="LevelOverlay/LevelPanel/LevelMargin/LevelVBox/RewardChoiceRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(140, 40)
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = "+2 Draws"
+
+[node name="RewardHintLabel" type="Label" parent="LevelOverlay/LevelPanel/LevelMargin/LevelVBox"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+text = "Choose one reward for the next level."
 horizontal_alignment = 1
 autowrap_mode = 3
 
@@ -579,7 +609,7 @@ horizontal_alignment = 1
 [node name="StartText" type="Label" parent="StartOverlay/StartPanel/StartMargin/StartVBox"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 14
-text = "You have 3 lives. Clear each level before the draw limit runs out. Every 3 cleared levels, the next level gets +2 bonus draws."
+text = "You have 3 lives. Clear each level before the draw limit runs out. Every 3 cleared levels, choose a reward for the next level."
 horizontal_alignment = 1
 autowrap_mode = 3
 

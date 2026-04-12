@@ -24,6 +24,8 @@ var remaining_deck_revealed: bool = false
 var remaining_deck_reveal_in_progress: bool = false
 var deck_reveal_generation: int = 0
 var pending_level_intro_message: String = ""
+var pending_level_outcome: Dictionary = {}
+var pending_reward_message: String = ""
 var shake_tween: Tween
 var bonus_banner_tween: Tween
 var card_sfx_player: AudioStreamPlayer
@@ -72,6 +74,10 @@ var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 @onready var level_overlay: CenterContainer = %LevelOverlay
 @onready var level_title: Label = %LevelTitle
 @onready var level_text: Label = %LevelText
+@onready var reward_choice_row: HBoxContainer = %RewardChoiceRow
+@onready var reward_life_button: Button = %RewardLifeButton
+@onready var reward_draws_button: Button = %RewardDrawsButton
+@onready var reward_hint_label: Label = %RewardHintLabel
 @onready var level_continue_button: Button = %LevelContinueButton
 @onready var start_button: Button = %StartButton
 
@@ -84,6 +90,8 @@ func _ready() -> void:
 	back_button.pressed.connect(_on_back_pressed)
 	play_again_button.pressed.connect(_on_play_again)
 	start_button.pressed.connect(_on_start_pressed)
+	reward_life_button.pressed.connect(_on_reward_life_pressed)
+	reward_draws_button.pressed.connect(_on_reward_draws_pressed)
 	level_continue_button.pressed.connect(_on_level_continue_pressed)
 	card_panel.resized.connect(_refresh_pivots)
 	streak_label.resized.connect(_refresh_pivots)
@@ -99,6 +107,7 @@ func start_game() -> void:
 	level_overlay.visible = false
 	play_again_button.visible = false
 	back_button.visible = false
+	_reset_level_overlay_state()
 	pending_level_intro_message = ""
 	subtitle_label.text = "Build enough correct guesses before the level runs out of draws."
 	_start_level("Run started. %s" % _current_level_brief())
@@ -113,6 +122,7 @@ func _start_level(message: String) -> void:
 	remaining_deck_reveal_in_progress = false
 	level_overlay.visible = false
 	pending_level_intro_message = ""
+	_reset_level_overlay_state()
 	current_card = deck.draw()
 	play_again_button.visible = false
 	back_button.visible = false
@@ -135,6 +145,7 @@ func _show_start_state() -> void:
 	remaining_deck_reveal_in_progress = false
 	level_overlay.visible = false
 	pending_level_intro_message = ""
+	_reset_level_overlay_state()
 	game_state = null
 	current_card = {}
 	card_panel.scale = Vector2.ONE
@@ -193,6 +204,9 @@ func _current_level_brief() -> String:
 		brief += " (%d bonus draws active)." % bonus_draws
 	else:
 		brief += "."
+	var modifier_label: String = game_state.get_level_modifier_label()
+	if not modifier_label.is_empty():
+		brief += " Modifier: %s." % modifier_label
 	return brief
 
 func _set_bonus_banner_state(bonus_draws: int) -> void:
@@ -220,6 +234,58 @@ func _set_bonus_banner_state(bonus_draws: int) -> void:
 	bonus_banner_tween.set_loops()
 	bonus_banner_tween.tween_property(bonus_banner, "scale", Vector2(1.015, 1.015), 0.65)
 	bonus_banner_tween.tween_property(bonus_banner, "scale", Vector2.ONE, 0.65)
+
+func _reset_level_overlay_state() -> void:
+	pending_level_outcome = {}
+	pending_reward_message = ""
+	reward_choice_row.visible = false
+	reward_hint_label.visible = false
+	reward_hint_label.text = ""
+	reward_life_button.disabled = false
+	reward_draws_button.disabled = false
+	level_continue_button.visible = true
+
+func _refresh_level_overlay_content() -> void:
+	if game_state == null or pending_level_outcome.is_empty():
+		return
+	var cleared_level_number: int = int(pending_level_outcome.get("level_number", game_state.get_level_number() - 1))
+	var next_level_number: int = int(pending_level_outcome.get("next_level_number", game_state.get_level_number()))
+	var next_level_bonus_draws: int = game_state.get_active_bonus_draws()
+	var reward_choice_available: bool = bool(pending_level_outcome.get("reward_choice_available", false))
+	var modifier_label: String = game_state.get_level_modifier_label()
+	var modifier_description: String = game_state.get_level_modifier_description()
+
+	level_title.text = "Level %d Cleared" % cleared_level_number
+	level_text.text = "Run score: %d\nLives left: %d\n\nNext up: reach %d points in %d draws." % [
+		game_state.run_score,
+		game_state.lives,
+		game_state.get_level_target(),
+		game_state.get_level_draw_limit(),
+	]
+	if next_level_bonus_draws > 0:
+		level_text.text += "\nReward selected: +%d draws for Level %d." % [next_level_bonus_draws, next_level_number]
+	elif reward_choice_available and game_state.has_pending_reward_choice():
+		level_text.text += "\nCheckpoint reward ready for Level %d." % next_level_number
+	if not modifier_label.is_empty():
+		level_text.text += "\nModifier: %s - %s" % [modifier_label, modifier_description]
+
+	reward_choice_row.visible = reward_choice_available and game_state.has_pending_reward_choice()
+	level_continue_button.visible = not reward_choice_row.visible
+	reward_life_button.disabled = not game_state.can_gain_life()
+	reward_draws_button.disabled = false
+
+	if reward_choice_row.visible:
+		reward_hint_label.visible = true
+		if game_state.can_gain_life():
+			reward_hint_label.text = "Choose a reward for the next level."
+		else:
+			reward_hint_label.text = "Lives are full, so +2 Draws is the only available reward."
+	elif not pending_reward_message.is_empty():
+		reward_hint_label.visible = true
+		reward_hint_label.text = pending_reward_message
+	else:
+		reward_hint_label.visible = false
+		reward_hint_label.text = ""
 
 func _update_deck_label() -> void:
 	if start_overlay.visible:
@@ -607,17 +673,29 @@ func _on_deck_card_pressed() -> void:
 
 	var guessed_right: bool = pending_guess_higher == (next_value > previous_value)
 	if guessed_right:
-		var correct_outcome: Dictionary = game_state.resolve_correct_guess()
+		var correct_outcome: Dictionary = game_state.resolve_correct_guess(next_card)
 		_update_high_score()
 		_update_status_labels()
 		_play_success_sound()
 		var awarded_points: int = int(correct_outcome.get("awarded_points", 1))
 		var multiplier: int = int(correct_outcome.get("multiplier", 1))
-		var reward_text: String = "+%d points" % awarded_points
-		if awarded_points == 1:
-			reward_text = "+1 point"
-		if multiplier > 1:
-			reward_text += " (x%d streak)" % multiplier
+		var modifier_bonus: int = int(correct_outcome.get("modifier_bonus", 0))
+		var modifier_name: String = String(correct_outcome.get("modifier_name", ""))
+		var modifier_effect_text: String = String(correct_outcome.get("modifier_effect_text", ""))
+		var modifier_blocked: bool = bool(correct_outcome.get("modifier_blocked", false))
+		var reward_text: String
+		if modifier_blocked:
+			reward_text = "No points"
+		else:
+			reward_text = "+%d points" % awarded_points
+			if awarded_points == 1:
+				reward_text = "+1 point"
+			if multiplier > 1:
+				reward_text += " (x%d streak)" % multiplier
+			if modifier_bonus > 0 and not modifier_name.is_empty():
+				reward_text += " +1 %s" % modifier_name
+		if not modifier_effect_text.is_empty() and modifier_blocked:
+			reward_text += " (%s)" % modifier_effect_text
 		_set_result_text("Correct! %s %s." % [comparison_text, reward_text], RESULT_SUCCESS)
 		_animate_streak()
 		_emit_streak_particles()
@@ -767,6 +845,7 @@ func _finish_run(message: String, won: bool) -> void:
 	pending_guess_higher = false
 	level_overlay.visible = false
 	pending_level_intro_message = ""
+	_reset_level_overlay_state()
 	_set_guess_buttons_enabled(false)
 	_set_deck_pick_enabled(false)
 	back_button.visible = false
@@ -785,32 +864,41 @@ func _finish_run(message: String, won: bool) -> void:
 func _show_level_clear_overlay(outcome: Dictionary) -> void:
 	if game_state == null:
 		return
-	var cleared_level_number: int = int(outcome.get("level_number", game_state.get_level_number() - 1))
+	pending_level_outcome = outcome.duplicate(true)
+	pending_reward_message = ""
 	var next_level_number: int = int(outcome.get("next_level_number", game_state.get_level_number()))
-	var next_level_bonus_draws: int = int(outcome.get("next_level_bonus_draws", game_state.get_active_bonus_draws()))
-	var bonus_unlocked: bool = bool(outcome.get("bonus_unlocked", false))
-	level_title.text = "Level %d Cleared" % cleared_level_number
-	level_text.text = "Run score: %d\nLives left: %d\n\nNext up: reach %d points in %d draws." % [
-		game_state.run_score,
-		game_state.lives,
-		game_state.get_level_target(),
-		game_state.get_level_draw_limit(),
-	]
-	if next_level_bonus_draws > 0:
-		level_text.text += "\nBonus active: +%d draws for Level %d." % [next_level_bonus_draws, next_level_number]
-	elif bonus_unlocked:
-		level_text.text += "\nBonus unlocked for the next level."
 	level_continue_button.text = "Start Level %d" % next_level_number
 	pending_level_intro_message = "Level %d begins. %s" % [next_level_number, _current_level_brief()]
 	subtitle_label.text = "Take a breath, then continue when you're ready."
-	if bonus_unlocked:
-		_set_result_text("Strong round. Reward unlocked: +2 draws for the next level.", RESULT_WIN)
+	if bool(outcome.get("reward_choice_available", false)):
+		_set_result_text("Checkpoint reached. Choose a reward for the next level.", RESULT_WIN)
 	else:
 		_set_result_text("Strong round. You're moving up.", RESULT_WIN)
+	_refresh_level_overlay_content()
 	level_overlay.visible = true
 
+func _on_reward_life_pressed() -> void:
+	_apply_reward_choice(GameState.REWARD_LIFE)
+
+func _on_reward_draws_pressed() -> void:
+	_apply_reward_choice(GameState.REWARD_DRAWS)
+
+func _apply_reward_choice(reward_id: String) -> void:
+	if game_state == null or pending_level_outcome.is_empty():
+		return
+	var reward_result: Dictionary = game_state.apply_reward_choice(reward_id)
+	if not bool(reward_result.get("applied", false)):
+		pending_reward_message = String(reward_result.get("label", "Choose a reward."))
+		_refresh_level_overlay_content()
+		return
+	pending_reward_message = "Reward selected: %s." % String(reward_result.get("label", ""))
+	level_continue_button.text = "Start Level %d" % game_state.get_level_number()
+	pending_level_intro_message = "Level %d begins. %s" % [game_state.get_level_number(), _current_level_brief()]
+	_update_status_labels()
+	_refresh_level_overlay_content()
+
 func _on_level_continue_pressed() -> void:
-	if game_state == null or pending_level_intro_message.is_empty():
+	if game_state == null or pending_level_intro_message.is_empty() or game_state.has_pending_reward_choice():
 		return
 	subtitle_label.text = "Build enough correct guesses before the level runs out of draws."
 	_start_level(pending_level_intro_message)

@@ -16,6 +16,7 @@ var deck: Deck
 var game_state: GameState
 var current_card: Dictionary = {}
 var high_score: int = 0
+var is_muted: bool = false
 var round_active: bool = false
 var input_locked: bool = false
 var awaiting_deck_pick: bool = false
@@ -40,6 +41,8 @@ var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 @onready var subtitle_label: Label = %SubtitleLabel
 @onready var bonus_banner: PanelContainer = %BonusBanner
 @onready var bonus_banner_label: Label = %BonusBannerLabel
+@onready var modifier_banner: PanelContainer = %ModifierBanner
+@onready var modifier_banner_label: Label = %ModifierBannerLabel
 @onready var card_panel: PanelContainer = %CardPanel
 @onready var card_label: Label = %CardLabel
 @onready var card_suit_center: Label = %CardSuitCenter
@@ -51,6 +54,7 @@ var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 @onready var high_score_label: Label = %HighScoreLabel
 @onready var remaining_label: Label = %RemainingLabel
 @onready var streak_label: Label = %StreakLabel
+@onready var mute_button: Button = %MuteButton
 @onready var higher_button: Button = %HigherButton
 @onready var lower_button: Button = %LowerButton
 @onready var lower_preview_panel: PanelContainer = %LowerPreviewPanel
@@ -85,6 +89,7 @@ func _ready() -> void:
 	_setup_audio()
 	_setup_effects_layer()
 	rng.randomize()
+	mute_button.pressed.connect(_on_mute_pressed)
 	higher_button.pressed.connect(_on_higher)
 	lower_button.pressed.connect(_on_lower)
 	back_button.pressed.connect(_on_back_pressed)
@@ -96,6 +101,7 @@ func _ready() -> void:
 	card_panel.resized.connect(_refresh_pivots)
 	streak_label.resized.connect(_refresh_pivots)
 	high_score = _load_high_score()
+	_update_mute_button()
 	await get_tree().process_frame
 	_refresh_pivots()
 	_show_start_state()
@@ -162,6 +168,8 @@ func _show_start_state() -> void:
 func _update_status_labels() -> void:
 	var run_score: int = 0 if game_state == null else game_state.run_score
 	var active_multiplier: int = 1 if game_state == null else game_state.get_streak_multiplier()
+	var modifier_label: String = "" if game_state == null else game_state.get_level_modifier_label()
+	var modifier_description: String = "" if game_state == null else game_state.get_level_modifier_description()
 	score_label.text = "Run: %d  Mult: x%d" % [run_score, active_multiplier]
 	high_score_label.text = "Best: %d" % high_score
 	var bonus_draws: int = 0 if game_state == null else game_state.get_active_bonus_draws()
@@ -188,6 +196,7 @@ func _update_status_labels() -> void:
 		streak_color = Color("ffe29a")
 	streak_label.add_theme_color_override("font_color", streak_color)
 	_set_bonus_banner_state(bonus_draws)
+	_set_modifier_banner_state(modifier_label, modifier_description)
 	_update_deck_label()
 	_rebuild_deck_view()
 
@@ -234,6 +243,19 @@ func _set_bonus_banner_state(bonus_draws: int) -> void:
 	bonus_banner_tween.set_loops()
 	bonus_banner_tween.tween_property(bonus_banner, "scale", Vector2(1.015, 1.015), 0.65)
 	bonus_banner_tween.tween_property(bonus_banner, "scale", Vector2.ONE, 0.65)
+
+func _set_modifier_banner_state(modifier_label: String, modifier_description: String) -> void:
+	var has_modifier: bool = not modifier_label.is_empty()
+	modifier_banner.visible = has_modifier
+	if has_modifier:
+		var short_hint: String = modifier_description
+		if modifier_label == "Royal Bonus":
+			short_hint = "J, Q, K, and A give +1 point"
+		elif modifier_label == "Blackout":
+			short_hint = "Only black revealed cards score"
+		modifier_banner_label.text = "Modifier: %s | %s" % [modifier_label, short_hint]
+	else:
+		modifier_banner_label.text = ""
 
 func _reset_level_overlay_state() -> void:
 	pending_level_outcome = {}
@@ -496,6 +518,20 @@ func _set_result_text(message: String, color: Color) -> void:
 	result_label.text = message
 	result_label.add_theme_color_override("font_color", color)
 
+func _update_mute_button() -> void:
+	mute_button.text = "Sound: Off" if is_muted else "Sound: On"
+
+func _set_muted(value: bool) -> void:
+	is_muted = value
+	_update_mute_button()
+	if is_muted:
+		if card_sfx_player != null:
+			card_sfx_player.stop()
+		if success_sfx_player != null:
+			success_sfx_player.stop()
+		if fail_sfx_player != null:
+			fail_sfx_player.stop()
+
 func _set_guess_buttons_enabled(is_enabled: bool) -> void:
 	higher_button.disabled = !is_enabled
 	lower_button.disabled = !is_enabled
@@ -631,6 +667,9 @@ func _on_higher() -> void:
 
 func _on_lower() -> void:
 	guess(false)
+
+func _on_mute_pressed() -> void:
+	_set_muted(!is_muted)
 
 func guess(player_said_higher: bool) -> void:
 	if not round_active or input_locked or awaiting_deck_pick:
@@ -972,7 +1011,7 @@ func _play_fail_sound() -> void:
 	])
 
 func _play_tone_sequence(player: AudioStreamPlayer, segments: Array) -> void:
-	if player == null:
+	if player == null or is_muted:
 		return
 	player.stop()
 	player.play()

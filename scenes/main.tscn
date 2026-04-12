@@ -106,6 +106,14 @@ theme_override_constants/h_separation = 18
 theme_override_constants/v_separation = 6
 columns = 2
 
+[node name="MuteButton" type="Button" parent="GameMargin/GameVBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(138, 36)
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_font_sizes/font_size = 15
+text = "Sound: On"
+
 [node name="BonusBanner" type="PanelContainer" parent="GameMargin/GameVBox"]
 unique_name_in_owner = true
 visible = false
@@ -173,6 +181,27 @@ theme_override_font_sizes/font_size = 14
 text = "Beat the level target before you run out of draws."
 horizontal_alignment = 1
 autowrap_mode = 3
+
+[node name="ModifierBanner" type="PanelContainer" parent="GameMargin/GameVBox"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_styles/panel = SubResource("3")
+
+[node name="ModifierBannerMargin" type="MarginContainer" parent="GameMargin/GameVBox/ModifierBanner"]
+layout_mode = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 5
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 5
+
+[node name="ModifierBannerLabel" type="Label" parent="GameMargin/GameVBox/ModifierBanner/ModifierBannerMargin"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+text = "Modifier"
+horizontal_alignment = 1
 
 [node name="ComparisonRow" type="HBoxContainer" parent="GameMargin/GameVBox"]
 layout_mode = 2

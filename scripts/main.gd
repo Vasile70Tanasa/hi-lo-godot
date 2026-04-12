@@ -243,6 +243,8 @@ func _reset_level_overlay_state() -> void:
 	reward_hint_label.text = ""
 	reward_life_button.disabled = false
 	reward_draws_button.disabled = false
+	reward_life_button.text = "+1 Life"
+	reward_draws_button.text = "+2 Draws"
 	level_continue_button.visible = true
 
 func _refresh_level_overlay_content() -> void:
@@ -252,10 +254,11 @@ func _refresh_level_overlay_content() -> void:
 	var next_level_number: int = int(pending_level_outcome.get("next_level_number", game_state.get_level_number()))
 	var next_level_bonus_draws: int = game_state.get_active_bonus_draws()
 	var reward_choice_available: bool = bool(pending_level_outcome.get("reward_choice_available", false))
+	var reward_choice_pending: bool = reward_choice_available and game_state.has_pending_reward_choice()
 	var modifier_label: String = game_state.get_level_modifier_label()
 	var modifier_description: String = game_state.get_level_modifier_description()
 
-	level_title.text = "Level %d Cleared" % cleared_level_number
+	level_title.text = "Checkpoint Reward" if reward_choice_pending else "Level %d Cleared" % cleared_level_number
 	level_text.text = "Run score: %d\nLives left: %d\n\nNext up: reach %d points in %d draws." % [
 		game_state.run_score,
 		game_state.lives,
@@ -264,20 +267,25 @@ func _refresh_level_overlay_content() -> void:
 	]
 	if next_level_bonus_draws > 0:
 		level_text.text += "\nReward selected: +%d draws for Level %d." % [next_level_bonus_draws, next_level_number]
-	elif reward_choice_available and game_state.has_pending_reward_choice():
+	elif reward_choice_pending:
 		level_text.text += "\nCheckpoint reward ready for Level %d." % next_level_number
 	if not modifier_label.is_empty():
 		level_text.text += "\nModifier: %s - %s" % [modifier_label, modifier_description]
 
-	reward_choice_row.visible = reward_choice_available and game_state.has_pending_reward_choice()
+	reward_choice_row.visible = reward_choice_pending
 	level_continue_button.visible = not reward_choice_row.visible
 	reward_life_button.disabled = not game_state.can_gain_life()
 	reward_draws_button.disabled = false
+	if game_state.can_gain_life():
+		reward_life_button.text = "+1 Life (%d/%d)" % [mini(game_state.lives + 1, GameState.MAX_LIVES), GameState.MAX_LIVES]
+	else:
+		reward_life_button.text = "Lives Full"
+	reward_draws_button.text = "+2 Draws (Lv %d)" % next_level_number
 
 	if reward_choice_row.visible:
 		reward_hint_label.visible = true
 		if game_state.can_gain_life():
-			reward_hint_label.text = "Choose a reward for the next level."
+			reward_hint_label.text = "Choose one reward. +1 Life is permanent for this run, while +2 Draws only helps the next level."
 		else:
 			reward_hint_label.text = "Lives are full, so +2 Draws is the only available reward."
 	elif not pending_reward_message.is_empty():

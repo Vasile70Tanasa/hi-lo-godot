@@ -554,14 +554,14 @@ alignment = 1
 
 [node name="RewardLifeButton" type="Button" parent="LevelOverlay/LevelPanel/LevelMargin/LevelVBox/RewardChoiceRow"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(120, 40)
+custom_minimum_size = Vector2(146, 40)
 layout_mode = 2
 theme_override_font_sizes/font_size = 16
 text = "+1 Life"
 
 [node name="RewardDrawsButton" type="Button" parent="LevelOverlay/LevelPanel/LevelMargin/LevelVBox/RewardChoiceRow"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(140, 40)
+custom_minimum_size = Vector2(156, 40)
 layout_mode = 2
 theme_override_font_sizes/font_size = 16
 text = "+2 Draws"

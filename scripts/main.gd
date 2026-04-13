@@ -170,7 +170,10 @@ func _update_status_labels() -> void:
 	var active_multiplier: int = 1 if game_state == null else game_state.get_streak_multiplier()
 	var modifier_label: String = "" if game_state == null else game_state.get_level_modifier_label()
 	var modifier_description: String = "" if game_state == null else game_state.get_level_modifier_description()
-	score_label.text = "Run: %d  Mult: x%d" % [run_score, active_multiplier]
+	if modifier_label == "Precision" and game_state != null:
+		score_label.text = "Run: %d  Precision: %d/2" % [run_score, game_state.get_precision_chain()]
+	else:
+		score_label.text = "Run: %d  Mult: x%d" % [run_score, active_multiplier]
 	high_score_label.text = "Best: %d" % high_score
 	var bonus_draws: int = 0 if game_state == null else game_state.get_active_bonus_draws()
 	var cards_left: int = _get_cards_left_for_display()
@@ -253,6 +256,8 @@ func _set_modifier_banner_state(modifier_label: String, modifier_description: St
 			short_hint = "J, Q, K, and A give +1 point"
 		elif modifier_label == "Blackout":
 			short_hint = "Only black revealed cards score"
+		elif modifier_label == "Precision":
+			short_hint = "2 correct in a row = 3 points"
 		modifier_banner_label.text = "Modifier: %s | %s" % [modifier_label, short_hint]
 	else:
 		modifier_banner_label.text = ""
@@ -731,7 +736,12 @@ func _on_deck_card_pressed() -> void:
 		var modifier_effect_text: String = String(correct_outcome.get("modifier_effect_text", ""))
 		var modifier_blocked: bool = bool(correct_outcome.get("modifier_blocked", false))
 		var reward_text: String
-		if modifier_blocked:
+		if modifier_name == "Precision":
+			if awarded_points > 0:
+				reward_text = "+%d points (%s)" % [awarded_points, modifier_effect_text]
+			else:
+				reward_text = "No points (%s)" % modifier_effect_text
+		elif modifier_blocked:
 			reward_text = "No points"
 		else:
 			reward_text = "+%d points" % awarded_points

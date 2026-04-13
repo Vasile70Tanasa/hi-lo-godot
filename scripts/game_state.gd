@@ -6,16 +6,22 @@ const MAX_LIVES := 4
 const MODIFIER_NONE := ""
 const MODIFIER_ROYAL_BONUS := "royal_bonus"
 const MODIFIER_BLACKOUT := "blackout"
+const MODIFIER_PRECISION := "precision"
 const REWARD_NONE := ""
 const REWARD_LIFE := "life"
 const REWARD_DRAWS := "draws"
 const LEVEL_CONFIGS: Array[Dictionary] = [
 	{"target": 5, "draw_limit": 10},
 	{"target": 6, "draw_limit": 9},
-	{"target": 7, "draw_limit": 8, "modifier": MODIFIER_ROYAL_BONUS},
+	{"target": 7, "draw_limit": 8},
 	{"target": 8, "draw_limit": 8},
-	{"target": 9, "draw_limit": 7, "modifier": MODIFIER_ROYAL_BONUS},
+	{"target": 8, "draw_limit": 9, "modifier": MODIFIER_ROYAL_BONUS},
+	{"target": 9, "draw_limit": 8},
+	{"target": 9, "draw_limit": 9},
 	{"target": 8, "draw_limit": 10, "modifier": MODIFIER_BLACKOUT},
+	{"target": 10, "draw_limit": 9},
+	{"target": 10, "draw_limit": 10},
+	{"target": 9, "draw_limit": 11, "modifier": MODIFIER_PRECISION},
 ]
 const NEXT_LEVEL_BONUS_DRAWS := 2
 const BONUS_UNLOCK_INTERVAL := 3
@@ -26,6 +32,7 @@ var run_score: int = 0
 var level_score: int = 0
 var draws_used: int = 0
 var current_streak: int = 0
+var precision_chain: int = 0
 var active_bonus_draws: int = 0
 var reward_choice_pending: bool = false
 
@@ -54,6 +61,8 @@ func get_level_modifier() -> String:
 
 func get_level_modifier_label() -> String:
 	match get_level_modifier():
+		MODIFIER_PRECISION:
+			return "Precision"
 		MODIFIER_BLACKOUT:
 			return "Blackout"
 		MODIFIER_ROYAL_BONUS:
@@ -63,12 +72,17 @@ func get_level_modifier_label() -> String:
 
 func get_level_modifier_description() -> String:
 	match get_level_modifier():
+		MODIFIER_PRECISION:
+			return "Every 2 correct guesses in a row give 3 points, then the counter resets."
 		MODIFIER_BLACKOUT:
 			return "Only black revealed cards score. Correct red cards give 0 points."
 		MODIFIER_ROYAL_BONUS:
 			return "Correct guesses on J, Q, K, or A give +1 extra point."
 		_:
 			return ""
+
+func get_precision_chain() -> int:
+	return precision_chain
 
 func get_base_level_draw_limit() -> int:
 	return int(get_current_level_config().get("draw_limit", 10))
@@ -124,8 +138,8 @@ func get_current_level_config() -> Dictionary:
 
 	var extra_level_index: int = level_index - LEVEL_CONFIGS.size()
 	return {
-		"target": 10 + extra_level_index,
-		"draw_limit": maxi(7 - int((extra_level_index + 1) / 2), 5),
+		"target": 10 + int((extra_level_index + 1) / 2),
+		"draw_limit": 10 + int(extra_level_index / 3),
 	}
 
 func get_streak_multiplier() -> int:
@@ -150,16 +164,19 @@ func resolve_correct_guess(revealed_card: Dictionary) -> Dictionary:
 	result["modifier_name"] = get_level_modifier_label()
 	result["modifier_blocked"] = bool(modifier_result.get("modifier_blocked", false))
 	result["modifier_effect_text"] = String(modifier_result.get("modifier_effect_text", ""))
+	result["precision_chain"] = precision_chain
 	return result
 
 func resolve_wrong_guess() -> Dictionary:
 	draws_used += 1
 	current_streak = 0
+	precision_chain = 0
 	return _evaluate_attempt(false, 0)
 
 func resolve_tie() -> Dictionary:
 	draws_used += 1
 	current_streak = 0
+	precision_chain = 0
 	return _evaluate_attempt(true, 0)
 
 func _evaluate_attempt(was_tie: bool, awarded_points: int) -> Dictionary:
@@ -215,6 +232,13 @@ func _get_correct_guess_modifier_result(revealed_card: Dictionary, streak_points
 		"modifier_effect_text": "",
 	}
 	match get_level_modifier():
+		MODIFIER_PRECISION:
+			precision_chain += 1
+			result["modifier_effect_text"] = "Precision %d/2" % precision_chain
+			if precision_chain >= 2:
+				result["awarded_points"] = 3
+				result["modifier_effect_text"] = "Precision combo complete"
+				precision_chain = 0
 		MODIFIER_BLACKOUT:
 			var suit: String = String(revealed_card.get("suit", ""))
 			if suit == "hearts" or suit == "diamonds":
@@ -235,3 +259,4 @@ func _reset_level_progress() -> void:
 	level_score = 0
 	draws_used = 0
 	current_streak = 0
+	precision_chain = 0

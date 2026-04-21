@@ -18,12 +18,12 @@ const LEVEL_CONFIGS: Array[Dictionary] = [
 	{"target": 8, "draw_limit": 9, "modifier": MODIFIER_ROYAL_BONUS},
 	{"target": 9, "draw_limit": 8},
 	{"target": 9, "draw_limit": 9},
-	{"target": 8, "draw_limit": 10, "modifier": MODIFIER_BLACKOUT},
+	{"target": 6, "draw_limit": 11, "modifier": MODIFIER_BLACKOUT},
 	{"target": 10, "draw_limit": 9},
 	{"target": 10, "draw_limit": 10},
 	{"target": 9, "draw_limit": 11, "modifier": MODIFIER_PRECISION},
 ]
-const NEXT_LEVEL_BONUS_DRAWS := 2
+const NEXT_LEVEL_BONUS_DRAWS := 3
 const BONUS_UNLOCK_INTERVAL := 3
 
 var lives: int = DEFAULT_LIVES
@@ -121,7 +121,7 @@ func apply_reward_choice(reward_id: String) -> Dictionary:
 				result["label"] = "Lives are already full"
 		REWARD_DRAWS:
 			active_bonus_draws = NEXT_LEVEL_BONUS_DRAWS
-			result["label"] = "+2 Draws"
+			result["label"] = "+%d Draws" % NEXT_LEVEL_BONUS_DRAWS
 			result["applied"] = true
 		_:
 			result["reward_id"] = REWARD_NONE

@@ -132,7 +132,7 @@ theme_override_constants/margin_bottom = 8
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 15
-text = "Bonus Active: +2 draws this level"
+text = "Bonus Active: +3 draws this level"
 horizontal_alignment = 1
 
 [node name="ScoreLabel" type="Label" parent="GameMargin/GameVBox/TopBar" unique_id=165941633]
@@ -593,7 +593,7 @@ unique_name_in_owner = true
 custom_minimum_size = Vector2(156, 40)
 layout_mode = 2
 theme_override_font_sizes/font_size = 16
-text = "+2 Draws"
+text = "+3 Draws"
 
 [node name="RewardHintLabel" type="Label" parent="LevelOverlay/LevelPanel/LevelMargin/LevelVBox"]
 unique_name_in_owner = true

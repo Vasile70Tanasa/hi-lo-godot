@@ -33,6 +33,7 @@ var level_score: int = 0
 var draws_used: int = 0
 var current_streak: int = 0
 var precision_chain: int = 0
+var consecutive_ties: int = 0
 var active_bonus_draws: int = 0
 var reward_choice_pending: bool = false
 
@@ -177,7 +178,39 @@ func resolve_tie() -> Dictionary:
 	draws_used += 1
 	current_streak = 0
 	precision_chain = 0
+	consecutive_ties += 1
 	return _evaluate_attempt(true, 0)
+
+func resolve_tie_bet_correct() -> Dictionary:
+	var multiplier: int = get_streak_multiplier()
+	var bonus: int = multiplier * 2
+	run_score += bonus
+	level_score += bonus
+	current_streak = 0
+	precision_chain = 0
+	consecutive_ties = 0
+	return _evaluate_attempt(true, bonus)
+
+func resolve_tie_bet_wrong() -> Dictionary:
+	current_streak = 0
+	precision_chain = 0
+	consecutive_ties = 0
+	draws_used += 1
+	return _evaluate_attempt(true, 0)
+
+func resolve_triple_tie() -> Dictionary:
+	var jackpot: int = 15
+	run_score += jackpot
+	level_score += jackpot
+	current_streak = 0
+	precision_chain = 0
+	consecutive_ties = 0
+	return _evaluate_attempt(true, jackpot)
+
+func pop_consecutive_ties() -> int:
+	var count: int = consecutive_ties
+	consecutive_ties = 0
+	return count
 
 func _evaluate_attempt(was_tie: bool, awarded_points: int) -> Dictionary:
 	var result: Dictionary = {
@@ -260,3 +293,4 @@ func _reset_level_progress() -> void:
 	draws_used = 0
 	current_streak = 0
 	precision_chain = 0
+	consecutive_ties = 0

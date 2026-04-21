@@ -78,6 +78,47 @@ experiența finală, dar mai mult refactor dacă te răzgândești.
 
 ---
 
+## Cărți egale - reguli decise
+
+### Egal simplu (două cărți consecutive cu același rang)
+
+Momentul devine dramatic - eveniment special, nu caz banal:
+1. Muzica se oprește
+2. Apare text mare "EGAL!"
+3. Jucătorul pariază: "Următoarea e mai mare sau mai mică decât ambele?"
+
+**Dacă ghicește corect:** bonus dublu de puncte
+**Dacă greșește:** reset streak + -1 draw (fără pierdere de viață)
+
+Logica: transformă ceva rar într-un moment memorabil cu tensiune reală.
+Pedeapsa e semnificativă (pierzi multiplicatorul și un draw) dar nu
+devastatoare (vieța rămâne intactă).
+
+### Triplu egal (trei cărți consecutive cu același rang)
+
+- **Eveniment extrem de rar** (~0.3% probabilitate)
+- **Recompensă:** bonus masiv instant de puncte + fanfare vizuală
+  (confetti, animație specială, sunet de jackpot)
+- **Fără pariere** - recompensă pură, fără decizie
+- **Streak:** se resetează (ca la egal simplu)
+- **Vieți:** neatinse
+
+Logica: triplu egal e deja o poveste în sine. Jackpot pur fără complicații
+- consistent cu logica jocului și distinct față de egalul simplu.
++1 viață e rezervat pentru alte mecanici (recompense între niveluri).
+
+### Tabel rezumat
+
+| Situație | Puncte | Streak | Vieți | Draw-uri |
+|----------|--------|--------|-------|----------|
+| Corect | +1 × multiplicator | +1 | neatinse | neatinse |
+| Greșit | neatinse | reset | -1 | neatinse |
+| Egal - pariere corect | +bonus dublu | reset | neatinse | neatinse |
+| Egal - pariere greșit | neatinse | reset | neatinse | -1 |
+| Triplu egal | +bonus masiv | reset | neatinse | neatinse |
+
+---
+
 ## Arhitectura pentru extensibilitate
 
 Ca să putem adăuga features ulterior fără refactor mare, sunt 3 decizii

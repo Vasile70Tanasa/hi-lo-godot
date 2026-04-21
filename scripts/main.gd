@@ -23,6 +23,8 @@ var awaiting_deck_pick: bool = false
 var pending_guess_higher: bool = false
 var remaining_deck_revealed: bool = false
 var remaining_deck_reveal_in_progress: bool = false
+var awaiting_tie_bet: bool = false
+var pending_tie_bet: bool = false
 var deck_reveal_generation: int = 0
 var pending_level_intro_message: String = ""
 var pending_level_outcome: Dictionary = {}
@@ -123,6 +125,7 @@ func _start_level(message: String) -> void:
 	round_active = true
 	input_locked = false
 	awaiting_deck_pick = false
+	awaiting_tie_bet = false
 	pending_guess_higher = false
 	remaining_deck_revealed = false
 	remaining_deck_reveal_in_progress = false
@@ -176,7 +179,7 @@ func _update_status_labels() -> void:
 		score_label.text = "Run: %d  Mult: x%d" % [run_score, active_multiplier]
 	high_score_label.text = "Best: %d" % high_score
 	var bonus_draws: int = 0 if game_state == null else game_state.get_active_bonus_draws()
-	var cards_left: int = _get_cards_left_for_display()
+	var _cards_left: int = _get_cards_left_for_display()
 	if game_state == null:
 		remaining_label.text = "Level: 1  Lives: %d" % GameState.DEFAULT_LIVES
 		streak_label.text = "Goal: 0 / 5  Draws: 0 / 10"
@@ -451,11 +454,14 @@ func _animate_deck_card_flip(deck_button: Button, card: Dictionary, generation: 
 		return false
 	deck_button.pivot_offset = deck_button.custom_minimum_size / 2.0
 	deck_button.scale = Vector2.ONE
+	deck_button.rotation = 0.0
 	var close_tween: Tween = create_tween()
 	close_tween.bind_node(deck_button)
 	close_tween.set_trans(Tween.TRANS_CUBIC)
 	close_tween.set_ease(Tween.EASE_IN)
-	close_tween.tween_property(deck_button, "scale", Vector2(0.08, 1.04), 0.05)
+	close_tween.set_parallel(true)
+	close_tween.tween_property(deck_button, "scale", Vector2(0.05, 1.07), 0.05)
+	close_tween.tween_property(deck_button, "rotation", -0.08, 0.05)
 	await close_tween.finished
 	if not is_instance_valid(deck_button) or _is_deck_reveal_cancelled(generation):
 		return false
@@ -466,7 +472,9 @@ func _animate_deck_card_flip(deck_button: Button, card: Dictionary, generation: 
 	open_tween.bind_node(deck_button)
 	open_tween.set_trans(Tween.TRANS_BACK)
 	open_tween.set_ease(Tween.EASE_OUT)
-	open_tween.tween_property(deck_button, "scale", Vector2(1.08, 0.98), 0.08)
+	open_tween.set_parallel(true)
+	open_tween.tween_property(deck_button, "scale", Vector2(1.12, 0.97), 0.08)
+	open_tween.tween_property(deck_button, "rotation", 0.06, 0.08)
 	await open_tween.finished
 	if not is_instance_valid(deck_button) or _is_deck_reveal_cancelled(generation):
 		return false
@@ -475,7 +483,9 @@ func _animate_deck_card_flip(deck_button: Button, card: Dictionary, generation: 
 	settle_tween.bind_node(deck_button)
 	settle_tween.set_trans(Tween.TRANS_SINE)
 	settle_tween.set_ease(Tween.EASE_OUT)
+	settle_tween.set_parallel(true)
 	settle_tween.tween_property(deck_button, "scale", Vector2.ONE, 0.04)
+	settle_tween.tween_property(deck_button, "rotation", 0.0, 0.04)
 	return true
 
 func _is_deck_reveal_cancelled(generation: int) -> bool:
@@ -679,6 +689,16 @@ func _on_mute_pressed() -> void:
 func guess(player_said_higher: bool) -> void:
 	if not round_active or input_locked or awaiting_deck_pick:
 		return
+	if awaiting_tie_bet:
+		awaiting_tie_bet = false
+		pending_tie_bet = true
+		pending_guess_higher = player_said_higher
+		_set_guess_buttons_enabled(false)
+		_show_choice_preview(player_said_higher, current_card)
+		_apply_empty_center_slot()
+		_set_result_text("Pick a card from the deck.", RESULT_NEUTRAL)
+		_set_deck_pick_enabled(true)
+		return
 	if deck.is_empty():
 		_finish_run("The deck ran out unexpectedly. Final run: %d" % _get_run_score(), false)
 		return
@@ -718,6 +738,11 @@ func _on_deck_card_pressed() -> void:
 	current_card = next_card
 	_update_status_labels()
 	var comparison_text: String = "%s after %s." % [Deck.card_text(next_card), Deck.card_text(previous_card)]
+
+	if pending_tie_bet:
+		pending_tie_bet = false
+		await _resolve_tie_bet(pending_guess_higher, previous_value, next_card, next_value)
+		return
 
 	if next_value == previous_value:
 		await _handle_tie(next_card)
@@ -774,28 +799,86 @@ func _on_deck_card_pressed() -> void:
 		_set_guess_buttons_enabled(true)
 
 func _handle_tie(tie_card: Dictionary) -> void:
+	var consecutive: int = game_state.consecutive_ties
 	var tie_outcome: Dictionary = game_state.resolve_tie()
 	_update_status_labels()
-	_set_result_text("Tie on %s. Both cards are discarded." % Deck.card_text(tie_card), RESULT_NEUTRAL)
+
+	# Triple tie - jackpot instant
+	if consecutive >= 2:
+		var jackpot_outcome: Dictionary = game_state.resolve_triple_tie()
+		_update_high_score()
+		_update_status_labels()
+		_play_success_sound()
+		_set_result_text("TRIPLE TIE! JACKPOT! +15 points!", RESULT_WIN)
+		_emit_streak_particles()
+		await get_tree().create_timer(1.5).timeout
+		if await _handle_level_outcome(jackpot_outcome):
+			return
+		_deal_new_card_after_tie()
+		return
+
 	if await _handle_level_outcome(tie_outcome):
 		return
-	await get_tree().create_timer(0.45).timeout
 
 	if deck.is_empty():
-		_finish_run("The deck ran out unexpectedly. Final run: %d" % _get_run_score(), false)
+		_finish_run("The deck ran out. Final run: %d" % _get_run_score(), false)
 		return
 
-	var new_current_card: Dictionary = deck.draw()
+	# Dramatic equal bet
+	_play_fail_sound()
+	_set_result_text("TIE! Both cards are %s. Bet: will the next card be Higher or Lower?" % Deck.card_text(tie_card), RESULT_WIN)
+	await get_tree().create_timer(0.4).timeout
+	input_locked = false
+	_set_guess_buttons_enabled(true)
+	awaiting_tie_bet = true
+
+func _resolve_tie_bet(player_said_higher: bool, bet_card_value: int, _next_card: Dictionary, next_value: int) -> void:
+	if next_value == bet_card_value:
+		_update_status_labels()
+		_set_result_text("Another tie! Bet again.", RESULT_NEUTRAL)
+		_reset_choice_slots()
+		input_locked = false
+		_set_guess_buttons_enabled(true)
+		awaiting_tie_bet = true
+		return
+
+	var guessed_right: bool = player_said_higher == (next_value > bet_card_value)
+	if guessed_right:
+		var outcome: Dictionary = game_state.resolve_tie_bet_correct()
+		_update_high_score()
+		_update_status_labels()
+		_play_success_sound()
+		var bonus: int = int(outcome.get("awarded_points", 2))
+		_set_result_text("Correct bet! +%d bonus points. Streak reset." % bonus, RESULT_SUCCESS)
+		_emit_streak_particles()
+		if await _handle_level_outcome(outcome):
+			return
+	else:
+		var outcome: Dictionary = game_state.resolve_tie_bet_wrong()
+		_update_status_labels()
+		_play_fail_sound()
+		_set_result_text("Wrong bet! Streak reset and -1 draw.", RESULT_FAIL)
+		if await _handle_level_outcome(outcome):
+			return
+
+	await get_tree().create_timer(0.55).timeout
+	_reset_choice_slots()
+	input_locked = false
+	_set_guess_buttons_enabled(true)
+
+func _deal_new_card_after_tie() -> void:
+	if deck.is_empty():
+		_finish_run("The deck ran out. Final run: %d" % _get_run_score(), false)
+		return
+	var new_card: Dictionary = deck.draw()
 	card_panel.visible = true
-	await _animate_card_reveal(new_current_card)
-	current_card = new_current_card
+	await _animate_card_reveal(new_card)
+	current_card = new_card
 	_update_status_labels()
-	_set_result_text("New card dealt. Pick Higher or Lower again.", RESULT_NEUTRAL)
-
+	_set_result_text("New card dealt. Pick Higher or Lower.", RESULT_NEUTRAL)
 	if deck.is_empty():
-		_finish_run("The deck ran out unexpectedly. Final run: %d" % _get_run_score(), false)
+		_finish_run("The deck ran out. Final run: %d" % _get_run_score(), false)
 		return
-
 	_reset_choice_slots()
 	input_locked = false
 	_set_guess_buttons_enabled(true)
@@ -845,6 +928,7 @@ func _get_run_score() -> int:
 func _animate_card_reveal(card: Dictionary) -> void:
 	_refresh_pivots()
 	card_panel.scale = Vector2.ONE
+	card_panel.rotation = 0.0
 	card_panel.modulate = Color(1.0, 1.0, 1.0, 1.0)
 	_play_card_sound()
 
@@ -852,7 +936,8 @@ func _animate_card_reveal(card: Dictionary) -> void:
 	close_front.set_trans(Tween.TRANS_CUBIC)
 	close_front.set_ease(Tween.EASE_IN)
 	close_front.set_parallel(true)
-	close_front.tween_property(card_panel, "scale", Vector2(0.03, 1.06), 0.08)
+	close_front.tween_property(card_panel, "scale", Vector2(0.02, 1.08), 0.08)
+	close_front.tween_property(card_panel, "rotation", -0.09, 0.08)
 	close_front.tween_property(card_panel, "modulate", Color(0.82, 0.82, 0.82, 1.0), 0.08)
 	await close_front.finished
 
@@ -861,7 +946,8 @@ func _animate_card_reveal(card: Dictionary) -> void:
 	show_back.set_trans(Tween.TRANS_CUBIC)
 	show_back.set_ease(Tween.EASE_OUT)
 	show_back.set_parallel(true)
-	show_back.tween_property(card_panel, "scale", Vector2(0.72, 1.03), 0.06)
+	show_back.tween_property(card_panel, "scale", Vector2(0.78, 1.02), 0.06)
+	show_back.tween_property(card_panel, "rotation", 0.07, 0.06)
 	show_back.tween_property(card_panel, "modulate", Color(0.9, 0.9, 0.9, 1.0), 0.06)
 	await show_back.finished
 
@@ -869,7 +955,8 @@ func _animate_card_reveal(card: Dictionary) -> void:
 	hide_back.set_trans(Tween.TRANS_CUBIC)
 	hide_back.set_ease(Tween.EASE_IN)
 	hide_back.set_parallel(true)
-	hide_back.tween_property(card_panel, "scale", Vector2(0.03, 1.06), 0.06)
+	hide_back.tween_property(card_panel, "scale", Vector2(0.02, 1.08), 0.06)
+	hide_back.tween_property(card_panel, "rotation", -0.08, 0.06)
 	hide_back.tween_property(card_panel, "modulate", Color(0.82, 0.82, 0.82, 1.0), 0.06)
 	await hide_back.finished
 
@@ -878,14 +965,17 @@ func _animate_card_reveal(card: Dictionary) -> void:
 	open_front.set_trans(Tween.TRANS_BACK)
 	open_front.set_ease(Tween.EASE_OUT)
 	open_front.set_parallel(true)
-	open_front.tween_property(card_panel, "scale", Vector2(1.04, 0.98), 0.12)
+	open_front.tween_property(card_panel, "scale", Vector2(1.08, 0.97), 0.12)
+	open_front.tween_property(card_panel, "rotation", 0.08, 0.12)
 	open_front.tween_property(card_panel, "modulate", Color(1.0, 1.0, 1.0, 1.0), 0.12)
 	await open_front.finished
 
 	var settle_front: Tween = create_tween()
 	settle_front.set_trans(Tween.TRANS_SINE)
 	settle_front.set_ease(Tween.EASE_OUT)
+	settle_front.set_parallel(true)
 	settle_front.tween_property(card_panel, "scale", Vector2.ONE, 0.06)
+	settle_front.tween_property(card_panel, "rotation", 0.0, 0.06)
 	await settle_front.finished
 
 func _animate_streak() -> void:

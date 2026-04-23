@@ -31,6 +31,8 @@ var pending_level_outcome: Dictionary = {}
 var pending_reward_message: String = ""
 var shake_tween: Tween
 var bonus_banner_tween: Tween
+var streak_bar: ProgressBar
+var streak_bar_tween: Tween
 var card_sfx_player: AudioStreamPlayer
 var success_sfx_player: AudioStreamPlayer
 var fail_sfx_player: AudioStreamPlayer
@@ -107,6 +109,7 @@ func _ready() -> void:
 	_update_mute_button()
 	await get_tree().process_frame
 	_refresh_pivots()
+	_create_streak_bar()
 	_show_start_state()
 
 func start_game() -> void:
@@ -213,6 +216,61 @@ func _update_status_labels() -> void:
 	_set_modifier_banner_state(modifier_label, modifier_description)
 	_update_deck_label()
 	_rebuild_deck_view()
+	_update_streak_bar(streak_value)
+
+func _create_streak_bar() -> void:
+	var top_bar_node: GridContainer = $GameMargin/GameVBox/TopBar
+	var vbox: VBoxContainer = top_bar_node.get_parent() as VBoxContainer
+
+	streak_bar = ProgressBar.new()
+	streak_bar.min_value = 0
+	streak_bar.max_value = HIGH_STREAK_THRESHOLD
+	streak_bar.value = 0
+	streak_bar.show_percentage = false
+	streak_bar.custom_minimum_size = Vector2(0, 10)
+	streak_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+	var bg_style := StyleBoxFlat.new()
+	bg_style.bg_color = Color(0.08, 0.08, 0.08, 0.6)
+	bg_style.corner_radius_top_left = 5
+	bg_style.corner_radius_top_right = 5
+	bg_style.corner_radius_bottom_right = 5
+	bg_style.corner_radius_bottom_left = 5
+	streak_bar.add_theme_stylebox_override("background", bg_style)
+
+	vbox.add_child(streak_bar)
+	vbox.move_child(streak_bar, top_bar_node.get_index() + 1)
+	_apply_streak_bar_fill_style(0)
+
+func _streak_bar_color(streak: int) -> Color:
+	if streak >= HIGH_STREAK_THRESHOLD:
+		return Color("ff4444")
+	if streak >= MEDIUM_STREAK_THRESHOLD:
+		return Color("ff9944")
+	if streak >= 3:
+		return Color("ffd166")
+	return Color("8fe388")
+
+func _apply_streak_bar_fill_style(streak: int) -> void:
+	if streak_bar == null:
+		return
+	var fill_style := StyleBoxFlat.new()
+	fill_style.bg_color = _streak_bar_color(streak)
+	fill_style.corner_radius_top_left = 5
+	fill_style.corner_radius_top_right = 5
+	fill_style.corner_radius_bottom_right = 5
+	fill_style.corner_radius_bottom_left = 5
+	streak_bar.add_theme_stylebox_override("fill", fill_style)
+
+func _update_streak_bar(streak: int) -> void:
+	if streak_bar == null:
+		return
+	_apply_streak_bar_fill_style(streak)
+	if streak_bar_tween != null:
+		streak_bar_tween.kill()
+	streak_bar_tween = create_tween()
+	streak_bar_tween.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	streak_bar_tween.tween_property(streak_bar, "value", float(mini(streak, HIGH_STREAK_THRESHOLD)), 0.25)
 
 func _current_level_brief() -> String:
 	if game_state == null:

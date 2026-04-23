@@ -46,6 +46,7 @@ func start_new_run() -> void:
 	run_score = 0
 	active_bonus_draws = 0
 	reward_choice_pending = false
+	current_streak = 0
 	_reset_level_progress()
 
 func get_level_number() -> int:
@@ -139,8 +140,8 @@ func get_current_level_config() -> Dictionary:
 
 	var extra_level_index: int = level_index - LEVEL_CONFIGS.size()
 	return {
-		"target": 10 + int((extra_level_index + 1) / 2),
-		"draw_limit": 10 + int(extra_level_index / 3),
+		"target": 10 + int((extra_level_index + 1) / 2.0),
+		"draw_limit": 10 + int(extra_level_index / 3.0),
 	}
 
 func get_streak_multiplier() -> int:
@@ -176,8 +177,6 @@ func resolve_wrong_guess() -> Dictionary:
 
 func resolve_tie() -> Dictionary:
 	draws_used += 1
-	current_streak = 0
-	precision_chain = 0
 	consecutive_ties += 1
 	return _evaluate_attempt(true, 0)
 
@@ -186,8 +185,6 @@ func resolve_tie_bet_correct() -> Dictionary:
 	var bonus: int = multiplier * 2
 	run_score += bonus
 	level_score += bonus
-	current_streak = 0
-	precision_chain = 0
 	consecutive_ties = 0
 	return _evaluate_attempt(true, bonus)
 
@@ -291,6 +288,5 @@ func _get_correct_guess_modifier_result(revealed_card: Dictionary, streak_points
 func _reset_level_progress() -> void:
 	level_score = 0
 	draws_used = 0
-	current_streak = 0
 	precision_chain = 0
 	consecutive_ties = 0

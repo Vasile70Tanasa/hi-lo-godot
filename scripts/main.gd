@@ -35,6 +35,7 @@ var card_sfx_player: AudioStreamPlayer
 var success_sfx_player: AudioStreamPlayer
 var fail_sfx_player: AudioStreamPlayer
 var effects_layer: Control
+var deck_visual_slots: Array[bool] = []
 var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 
 @onready var background: ColorRect = %Background
@@ -111,6 +112,10 @@ func _ready() -> void:
 func start_game() -> void:
 	deck_reveal_generation += 1
 	game_state = GameState.new()
+	deck = null
+	current_card = {}
+	awaiting_tie_bet = false
+	pending_tie_bet = false
 	start_overlay.visible = false
 	level_overlay.visible = false
 	play_again_button.visible = false
@@ -121,25 +126,27 @@ func start_game() -> void:
 	_start_level("Run started. %s" % _current_level_brief())
 
 func _start_level(message: String) -> void:
-	deck = Deck.new()
 	round_active = true
 	input_locked = false
 	awaiting_deck_pick = false
 	awaiting_tie_bet = false
+	pending_tie_bet = false
 	pending_guess_higher = false
 	remaining_deck_revealed = false
 	remaining_deck_reveal_in_progress = false
 	level_overlay.visible = false
 	pending_level_intro_message = ""
 	_reset_level_overlay_state()
-	current_card = deck.draw()
+	var level_message: String = message
+	if _prepare_level_deck_state():
+		level_message += " Fresh deck shuffled."
 	play_again_button.visible = false
 	back_button.visible = false
 	card_panel.visible = true
 	_apply_card_visual(current_card)
 	_play_card_sound()
 	_update_status_labels()
-	_set_result_text(message, RESULT_NEUTRAL)
+	_set_result_text(level_message, RESULT_NEUTRAL)
 	_reset_choice_slots()
 	_set_guess_buttons_enabled(true)
 
@@ -157,6 +164,7 @@ func _show_start_state() -> void:
 	_reset_level_overlay_state()
 	game_state = null
 	current_card = {}
+	deck_visual_slots.clear()
 	card_panel.scale = Vector2.ONE
 	card_panel.visible = true
 	_apply_card_back()
@@ -223,6 +231,77 @@ func _current_level_brief() -> String:
 	if not modifier_label.is_empty():
 		brief += " Modifier: %s." % modifier_label
 	return brief
+
+func _prepare_level_deck_state() -> bool:
+	if current_card.is_empty():
+		_start_new_deck_cycle()
+		return true
+	if deck == null or deck.is_empty():
+		_reshuffle_deck_around_current_card()
+		return true
+	return false
+
+func _ensure_deck_for_pick() -> bool:
+	if current_card.is_empty():
+		_start_new_deck_cycle()
+		return true
+	if deck == null or deck.is_empty():
+		_reshuffle_deck_around_current_card()
+		return true
+	return false
+
+func _start_new_deck_cycle() -> void:
+	deck = Deck.new()
+	current_card = deck.draw()
+	_reset_deck_visual_slots()
+
+func _reshuffle_deck_around_current_card() -> void:
+	deck = Deck.new()
+	_remove_card_from_deck(current_card)
+	_reset_deck_visual_slots()
+
+func _remove_card_from_deck(card: Dictionary) -> void:
+	if deck == null or card.is_empty():
+		return
+	var target_rank: int = int(card.get("rank", 0))
+	var target_suit: String = String(card.get("suit", ""))
+	for index in range(deck.cards.size()):
+		var candidate: Dictionary = deck.cards[index]
+		if int(candidate.get("rank", 0)) == target_rank and String(candidate.get("suit", "")) == target_suit:
+			deck.cards.remove_at(index)
+			return
+
+func _reset_deck_visual_slots() -> void:
+	deck_visual_slots.clear()
+	if deck == null:
+		return
+	for _slot in range(deck.cards_left()):
+		deck_visual_slots.append(true)
+
+func _consume_deck_visual_slot(slot_index: int) -> void:
+	if slot_index < 0 or slot_index >= deck_visual_slots.size():
+		return
+	deck_visual_slots[slot_index] = false
+
+func _consume_next_visual_slot() -> void:
+	for index in range(deck_visual_slots.size() - 1, -1, -1):
+		if deck_visual_slots[index]:
+			deck_visual_slots[index] = false
+			return
+
+func _draw_new_current_card() -> bool:
+	if deck == null or deck.is_empty():
+		_start_new_deck_cycle()
+		return true
+	current_card = deck.draw()
+	_consume_next_visual_slot()
+	return false
+
+func _reshuffle_after_reveal_if_needed() -> bool:
+	if current_card.is_empty() or deck == null or !deck.is_empty():
+		return false
+	_reshuffle_deck_around_current_card()
+	return true
 
 func _set_bonus_banner_state(bonus_draws: int) -> void:
 	var has_bonus: bool = bonus_draws > 0
@@ -345,18 +424,30 @@ func _rebuild_deck_view() -> void:
 		deck_grid.remove_child(child)
 		child.queue_free()
 
-	var cards_left: int = _get_cards_left_for_display()
+	var slot_count: int = deck_visual_slots.size()
+	if slot_count == 0 and deck != null and deck.cards_left() > 0 and !current_card.is_empty():
+		_reset_deck_visual_slots()
+		slot_count = deck_visual_slots.size()
 	var reveal_remaining_cards: bool = _should_show_remaining_deck_fronts()
-	for index in range(cards_left):
+	var remaining_card_index: int = 0
+	for index in range(slot_count):
+		if !deck_visual_slots[index]:
+			var empty_slot: Control = Control.new()
+			empty_slot.custom_minimum_size = Vector2(34, 50)
+			empty_slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			deck_grid.add_child(empty_slot)
+			continue
+
 		var deck_button: Button = Button.new()
 		deck_button.custom_minimum_size = Vector2(34, 50)
 		deck_button.focus_mode = Control.FOCUS_NONE
-		if reveal_remaining_cards and deck != null and index < deck.cards.size():
-			var remaining_card: Dictionary = deck.cards[index]
+		if reveal_remaining_cards and deck != null and remaining_card_index < deck.cards.size():
+			var remaining_card: Dictionary = deck.cards[remaining_card_index]
+			remaining_card_index += 1
 			_apply_deck_card_front(deck_button, remaining_card)
 		else:
 			_apply_deck_card_back(deck_button)
-			deck_button.pressed.connect(_on_deck_card_pressed)
+			deck_button.pressed.connect(_on_deck_card_pressed.bind(index))
 		deck_grid.add_child(deck_button)
 
 func _make_deck_card_style(fill_color: Color, border_color: Color) -> StyleBoxFlat:
@@ -689,6 +780,9 @@ func _on_mute_pressed() -> void:
 func guess(player_said_higher: bool) -> void:
 	if not round_active or input_locked or awaiting_deck_pick:
 		return
+	var reshuffled: bool = _ensure_deck_for_pick()
+	if reshuffled:
+		_update_status_labels()
 	if awaiting_tie_bet:
 		awaiting_tie_bet = false
 		pending_tie_bet = true
@@ -696,18 +790,15 @@ func guess(player_said_higher: bool) -> void:
 		_set_guess_buttons_enabled(false)
 		_show_choice_preview(player_said_higher, current_card)
 		_apply_empty_center_slot()
-		_set_result_text("Pick a card from the deck.", RESULT_NEUTRAL)
+		_set_result_text("Fresh deck shuffled. Pick a card from the deck." if reshuffled else "Pick a card from the deck.", RESULT_NEUTRAL)
 		_set_deck_pick_enabled(true)
-		return
-	if deck.is_empty():
-		_finish_run("The deck ran out unexpectedly. Final run: %d" % _get_run_score(), false)
 		return
 
 	pending_guess_higher = player_said_higher
 	_set_guess_buttons_enabled(false)
 	_show_choice_preview(player_said_higher, current_card)
 	_apply_empty_center_slot()
-	_set_result_text("Pick any facedown card from the deck.", RESULT_NEUTRAL)
+	_set_result_text("Fresh deck shuffled. Pick any facedown card from the deck." if reshuffled else "Pick any facedown card from the deck.", RESULT_NEUTRAL)
 	_set_deck_pick_enabled(true)
 
 func _on_back_pressed() -> void:
@@ -720,15 +811,15 @@ func _on_back_pressed() -> void:
 	_set_result_text("Choice canceled. Pick Higher or Lower.", RESULT_NEUTRAL)
 	_set_guess_buttons_enabled(true)
 
-func _on_deck_card_pressed() -> void:
+func _on_deck_card_pressed(slot_index: int) -> void:
 	if not round_active or input_locked or !awaiting_deck_pick:
 		return
-	if deck.is_empty():
-		_finish_run("The deck ran out unexpectedly. Final run: %d" % _get_run_score(), false)
-		return
+	if _ensure_deck_for_pick():
+		_update_status_labels()
 
 	input_locked = true
 	_set_deck_pick_enabled(false)
+	_consume_deck_visual_slot(slot_index)
 	var previous_card: Dictionary = current_card
 	var previous_value: int = Deck.card_value(previous_card)
 	var next_card: Dictionary = deck.draw()
@@ -736,6 +827,7 @@ func _on_deck_card_pressed() -> void:
 	card_panel.visible = true
 	await _animate_card_reveal(next_card)
 	current_card = next_card
+	var reshuffled_after_reveal: bool = _reshuffle_after_reveal_if_needed()
 	_update_status_labels()
 	var comparison_text: String = "%s after %s." % [Deck.card_text(next_card), Deck.card_text(previous_card)]
 
@@ -778,7 +870,10 @@ func _on_deck_card_pressed() -> void:
 				reward_text += " +1 %s" % modifier_name
 		if not modifier_effect_text.is_empty() and modifier_blocked:
 			reward_text += " (%s)" % modifier_effect_text
-		_set_result_text("Correct! %s %s." % [comparison_text, reward_text], RESULT_SUCCESS)
+		var success_text: String = "Correct! %s %s." % [comparison_text, reward_text]
+		if reshuffled_after_reveal:
+			success_text += " Fresh deck shuffled."
+		_set_result_text(success_text, RESULT_SUCCESS)
 		_animate_streak()
 		_emit_streak_particles()
 		if await _handle_level_outcome(correct_outcome):
@@ -790,7 +885,10 @@ func _on_deck_card_pressed() -> void:
 	else:
 		var wrong_outcome: Dictionary = game_state.resolve_wrong_guess()
 		_update_status_labels()
-		_set_result_text("Wrong! %s" % comparison_text, RESULT_FAIL)
+		var fail_text: String = "Wrong! %s" % comparison_text
+		if reshuffled_after_reveal:
+			fail_text += " Fresh deck shuffled."
+		_set_result_text(fail_text, RESULT_FAIL)
 		if await _handle_level_outcome(wrong_outcome):
 			return
 		await get_tree().create_timer(0.55).timeout
@@ -820,13 +918,16 @@ func _handle_tie(tie_card: Dictionary) -> void:
 	if await _handle_level_outcome(tie_outcome):
 		return
 
-	if deck.is_empty():
-		_finish_run("The deck ran out. Final run: %d" % _get_run_score(), false)
-		return
+	var reshuffled: bool = _ensure_deck_for_pick()
+	if reshuffled:
+		_update_status_labels()
 
 	# Dramatic equal bet
 	_play_fail_sound()
-	_set_result_text("TIE! Both cards are %s. Bet: will the next card be Higher or Lower?" % Deck.card_text(tie_card), RESULT_WIN)
+	var tie_message: String = "TIE! Both cards are %s. Bet: will the next card be Higher or Lower?" % Deck.card_text(tie_card)
+	if reshuffled:
+		tie_message += " Fresh deck shuffled."
+	_set_result_text(tie_message, RESULT_WIN)
 	await get_tree().create_timer(0.4).timeout
 	input_locked = false
 	_set_guess_buttons_enabled(true)
@@ -867,18 +968,12 @@ func _resolve_tie_bet(player_said_higher: bool, bet_card_value: int, _next_card:
 	_set_guess_buttons_enabled(true)
 
 func _deal_new_card_after_tie() -> void:
-	if deck.is_empty():
-		_finish_run("The deck ran out. Final run: %d" % _get_run_score(), false)
-		return
-	var new_card: Dictionary = deck.draw()
+	var reshuffled: bool = _draw_new_current_card()
 	card_panel.visible = true
-	await _animate_card_reveal(new_card)
-	current_card = new_card
+	await _animate_card_reveal(current_card)
+	reshuffled = _reshuffle_after_reveal_if_needed() or reshuffled
 	_update_status_labels()
-	_set_result_text("New card dealt. Pick Higher or Lower.", RESULT_NEUTRAL)
-	if deck.is_empty():
-		_finish_run("The deck ran out. Final run: %d" % _get_run_score(), false)
-		return
+	_set_result_text("New card dealt. Pick Higher or Lower.%s" % (" Fresh deck shuffled." if reshuffled else ""), RESULT_NEUTRAL)
 	_reset_choice_slots()
 	input_locked = false
 	_set_guess_buttons_enabled(true)

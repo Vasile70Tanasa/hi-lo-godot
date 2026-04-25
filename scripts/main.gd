@@ -37,6 +37,7 @@ var card_sfx_player: AudioStreamPlayer
 var success_sfx_player: AudioStreamPlayer
 var fail_sfx_player: AudioStreamPlayer
 var effects_layer: Control
+var incoming_overlay: Control = null
 var deck_visual_slots: Array[bool] = []
 var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 
@@ -62,20 +63,6 @@ var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 @onready var mute_button: Button = %MuteButton
 @onready var higher_button: Button = %HigherButton
 @onready var lower_button: Button = %LowerButton
-@onready var lower_preview_panel: PanelContainer = %LowerPreviewPanel
-@onready var lower_preview_rank_top: Label = %LowerPreviewRankTop
-@onready var lower_preview_suit_top: Label = %LowerPreviewSuitTop
-@onready var lower_preview_suit_center: Label = %LowerPreviewSuitCenter
-@onready var lower_preview_rank_center: Label = %LowerPreviewRankCenter
-@onready var lower_preview_rank_bottom: Label = %LowerPreviewRankBottom
-@onready var lower_preview_suit_bottom: Label = %LowerPreviewSuitBottom
-@onready var higher_preview_panel: PanelContainer = %HigherPreviewPanel
-@onready var higher_preview_rank_top: Label = %HigherPreviewRankTop
-@onready var higher_preview_suit_top: Label = %HigherPreviewSuitTop
-@onready var higher_preview_suit_center: Label = %HigherPreviewSuitCenter
-@onready var higher_preview_rank_center: Label = %HigherPreviewRankCenter
-@onready var higher_preview_rank_bottom: Label = %HigherPreviewRankBottom
-@onready var higher_preview_suit_bottom: Label = %HigherPreviewSuitBottom
 @onready var result_label: Label = %ResultLabel
 @onready var back_button: Button = %BackButton
 @onready var play_again_button: Button = %PlayAgainButton
@@ -109,6 +96,7 @@ func _ready() -> void:
 	_update_mute_button()
 	await get_tree().process_frame
 	_refresh_pivots()
+	_restructure_layout()
 	_create_streak_bar()
 	_show_start_state()
 
@@ -129,6 +117,7 @@ func start_game() -> void:
 	_start_level("Run started. %s" % _current_level_brief())
 
 func _start_level(message: String) -> void:
+	_dismiss_incoming_overlay()
 	round_active = true
 	input_locked = false
 	awaiting_deck_pick = false
@@ -218,17 +207,102 @@ func _update_status_labels() -> void:
 	_rebuild_deck_view()
 	_update_streak_bar(streak_value)
 
+func _restructure_layout() -> void:
+	var game_margin: MarginContainer = $GameMargin
+	var old_vbox: VBoxContainer = $GameMargin/GameVBox
+
+	var main_hbox := HBoxContainer.new()
+	main_hbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	main_hbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	main_hbox.add_theme_constant_override("separation", 24)
+	game_margin.add_child(main_hbox)
+
+	# LEFT: carta mare + streak bar vertical (HBox)
+	var left_col := HBoxContainer.new()
+	left_col.add_theme_constant_override("separation", 8)
+	left_col.alignment = BoxContainer.ALIGNMENT_CENTER
+	main_hbox.add_child(left_col)
+
+	# DECK: imediat lângă carte (VBox)
+	var deck_section := VBoxContainer.new()
+	deck_section.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	deck_section.add_theme_constant_override("separation", 8)
+	main_hbox.add_child(deck_section)
+
+	# CENTRU: statistici + info (VBox, expandat)
+	var center_col := VBoxContainer.new()
+	center_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	center_col.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	center_col.add_theme_constant_override("separation", 12)
+	center_col.alignment = BoxContainer.ALIGNMENT_CENTER
+	main_hbox.add_child(center_col)
+
+	# Mutăm carta în stânga, mărită dar fără să se extindă vertical
+	card_panel.reparent(left_col)
+	card_panel.custom_minimum_size = Vector2(200, 280)
+	card_panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+
+	# Butoanele verticale, text pe litere
+	lower_button.text = "L\nO\nW\nE\nR"
+	higher_button.text = "H\nI\nG\nH\nE\nR"
+	back_button.text = "Back  [Esc]"
+	lower_button.custom_minimum_size = Vector2(44, 0)
+	higher_button.custom_minimum_size = Vector2(44, 0)
+	back_button.custom_minimum_size = Vector2(120, 40)
+	lower_button.add_theme_font_size_override("font_size", 13)
+	higher_button.add_theme_font_size_override("font_size", 13)
+
+	# Nod title direct din scenă
+	var title_node: Label = $GameMargin/GameVBox/Title
+
+	# Reparentăm nodurile în ordinea dorită în centru
+	title_node.reparent(center_col)
+	subtitle_label.reparent(center_col)
+	result_label.reparent(center_col)
+	back_button.reparent(center_col)
+	play_again_button.reparent(center_col)
+	$GameMargin/GameVBox/TopBar.reparent(center_col)
+	bonus_banner.reparent(center_col)
+	modifier_banner.reparent(center_col)
+	mute_button.reparent(center_col)
+
+	# Deck label deasupra, apoi [butoane | grid] pe același rând
+	deck_label.reparent(deck_section)
+	var deck_row := HBoxContainer.new()
+	deck_row.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	deck_row.add_theme_constant_override("separation", 6)
+	deck_section.add_child(deck_row)
+
+	var buttons_col := VBoxContainer.new()
+	buttons_col.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	buttons_col.add_theme_constant_override("separation", 8)
+	deck_row.add_child(buttons_col)
+
+	higher_button.reparent(buttons_col)
+	higher_button.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	lower_button.reparent(buttons_col)
+	lower_button.size_flags_vertical = Control.SIZE_EXPAND_FILL
+
+	deck_grid.reparent(deck_row)
+	deck_grid.columns = 6
+
+	# Eliminăm vechiul VBox (include ComparisonRow cu preview slots)
+	old_vbox.queue_free()
+
 func _create_streak_bar() -> void:
-	var top_bar_node: GridContainer = $GameMargin/GameVBox/TopBar
-	var vbox: VBoxContainer = top_bar_node.get_parent() as VBoxContainer
+	# Bara e verticală, lângă card în left_col
+	var left_col: HBoxContainer = card_panel.get_parent() as HBoxContainer
+	if left_col == null:
+		return
 
 	streak_bar = ProgressBar.new()
 	streak_bar.min_value = 0
 	streak_bar.max_value = HIGH_STREAK_THRESHOLD
 	streak_bar.value = 0
 	streak_bar.show_percentage = false
-	streak_bar.custom_minimum_size = Vector2(0, 10)
-	streak_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	streak_bar.fill_mode = ProgressBar.FILL_BOTTOM_TO_TOP
+	streak_bar.custom_minimum_size = Vector2(14, 0)
+	streak_bar.size_flags_vertical = Control.SIZE_EXPAND_FILL
 
 	var bg_style := StyleBoxFlat.new()
 	bg_style.bg_color = Color(0.08, 0.08, 0.08, 0.6)
@@ -238,8 +312,7 @@ func _create_streak_bar() -> void:
 	bg_style.corner_radius_bottom_left = 5
 	streak_bar.add_theme_stylebox_override("background", bg_style)
 
-	vbox.add_child(streak_bar)
-	vbox.move_child(streak_bar, top_bar_node.get_index() + 1)
+	left_col.add_child(streak_bar)
 	_apply_streak_bar_fill_style(0)
 
 func _streak_bar_color(streak: int) -> Color:
@@ -497,7 +570,7 @@ func _rebuild_deck_view() -> void:
 			continue
 
 		var deck_button: Button = Button.new()
-		deck_button.custom_minimum_size = Vector2(34, 50)
+		deck_button.custom_minimum_size = Vector2(50, 70)
 		deck_button.focus_mode = Control.FOCUS_NONE
 		if reveal_remaining_cards and deck != null and remaining_card_index < deck.cards.size():
 			var remaining_card: Dictionary = deck.cards[remaining_card_index]
@@ -505,7 +578,7 @@ func _rebuild_deck_view() -> void:
 			_apply_deck_card_front(deck_button, remaining_card)
 		else:
 			_apply_deck_card_back(deck_button)
-			deck_button.pressed.connect(_on_deck_card_pressed.bind(index))
+			deck_button.pressed.connect(_on_deck_card_pressed.bind(deck_button))
 		deck_grid.add_child(deck_button)
 
 func _make_deck_card_style(fill_color: Color, border_color: Color) -> StyleBoxFlat:
@@ -709,101 +782,7 @@ func _set_deck_pick_enabled(is_enabled: bool) -> void:
 			deck_button.disabled = !is_enabled or !round_active
 
 func _reset_choice_slots() -> void:
-	_apply_preview_placeholder(
-		lower_preview_panel,
-		lower_preview_rank_top,
-		lower_preview_suit_top,
-		lower_preview_suit_center,
-		lower_preview_rank_center,
-		lower_preview_rank_bottom,
-		lower_preview_suit_bottom
-	)
-	_apply_preview_placeholder(
-		higher_preview_panel,
-		higher_preview_rank_top,
-		higher_preview_suit_top,
-		higher_preview_suit_center,
-		higher_preview_rank_center,
-		higher_preview_rank_bottom,
-		higher_preview_suit_bottom
-	)
-
-func _show_choice_preview(show_higher_side: bool, card: Dictionary) -> void:
-	_reset_choice_slots()
-
-	if show_higher_side:
-		_apply_preview_card(
-			higher_preview_panel,
-			card,
-			higher_preview_rank_top,
-			higher_preview_suit_top,
-			higher_preview_suit_center,
-			higher_preview_rank_center,
-			higher_preview_rank_bottom,
-			higher_preview_suit_bottom
-		)
-	else:
-		_apply_preview_card(
-			lower_preview_panel,
-			card,
-			lower_preview_rank_top,
-			lower_preview_suit_top,
-			lower_preview_suit_center,
-			lower_preview_rank_center,
-			lower_preview_rank_bottom,
-			lower_preview_suit_bottom
-		)
-
-func _apply_preview_card(
-	panel: PanelContainer,
-	card: Dictionary,
-	rank_top: Label,
-	suit_top: Label,
-	suit_center: Label,
-	rank_center: Label,
-	rank_bottom: Label,
-	suit_bottom: Label
-) -> void:
-	var rank_text: String = Deck.rank_text(card)
-	var suit_symbol: String = Deck.suit_symbol(card)
-	var suit_color: Color = Deck.suit_color(card)
-	panel.modulate = Color(1.0, 1.0, 1.0, 1.0)
-	rank_top.text = rank_text
-	suit_top.text = suit_symbol
-	suit_center.text = suit_symbol
-	rank_center.text = rank_text
-	rank_bottom.text = rank_text
-	suit_bottom.text = suit_symbol
-	rank_top.add_theme_color_override("font_color", suit_color)
-	suit_top.add_theme_color_override("font_color", suit_color)
-	suit_center.add_theme_color_override("font_color", suit_color)
-	rank_center.add_theme_color_override("font_color", suit_color)
-	rank_bottom.add_theme_color_override("font_color", suit_color)
-	suit_bottom.add_theme_color_override("font_color", suit_color)
-
-func _apply_preview_placeholder(
-	panel: PanelContainer,
-	rank_top: Label,
-	suit_top: Label,
-	suit_center: Label,
-	rank_center: Label,
-	rank_bottom: Label,
-	suit_bottom: Label
-) -> void:
-	var placeholder_color: Color = Color(0.086275, 0.12549, 0.164706, 0.4)
-	panel.modulate = Color(1.0, 1.0, 1.0, 0.42)
-	rank_top.text = ""
-	suit_top.text = ""
-	suit_center.text = ""
-	rank_center.text = ""
-	rank_bottom.text = ""
-	suit_bottom.text = ""
-	rank_top.add_theme_color_override("font_color", placeholder_color)
-	suit_top.add_theme_color_override("font_color", placeholder_color)
-	suit_center.add_theme_color_override("font_color", placeholder_color)
-	rank_center.add_theme_color_override("font_color", placeholder_color)
-	rank_bottom.add_theme_color_override("font_color", placeholder_color)
-	suit_bottom.add_theme_color_override("font_color", placeholder_color)
+	pass
 
 func _apply_empty_center_slot() -> void:
 	var placeholder_color: Color = Color(0.086275, 0.12549, 0.164706, 0.38)
@@ -832,6 +811,20 @@ func _on_higher() -> void:
 func _on_lower() -> void:
 	guess(false)
 
+func _unhandled_input(event: InputEvent) -> void:
+	if not event is InputEventKey or not event.pressed or event.echo:
+		return
+	match event.keycode:
+		KEY_D, KEY_RIGHT:
+			if higher_button.visible and not higher_button.disabled:
+				_on_higher()
+		KEY_A, KEY_LEFT:
+			if lower_button.visible and not lower_button.disabled:
+				_on_lower()
+		KEY_ESCAPE:
+			if back_button.visible and not back_button.disabled:
+				_on_back_pressed()
+
 func _on_mute_pressed() -> void:
 	_set_muted(!is_muted)
 
@@ -846,16 +839,12 @@ func guess(player_said_higher: bool) -> void:
 		pending_tie_bet = true
 		pending_guess_higher = player_said_higher
 		_set_guess_buttons_enabled(false)
-		_show_choice_preview(player_said_higher, current_card)
-		_apply_empty_center_slot()
 		_set_result_text("Fresh deck shuffled. Pick a card from the deck." if reshuffled else "Pick a card from the deck.", RESULT_NEUTRAL)
 		_set_deck_pick_enabled(true)
 		return
 
 	pending_guess_higher = player_said_higher
 	_set_guess_buttons_enabled(false)
-	_show_choice_preview(player_said_higher, current_card)
-	_apply_empty_center_slot()
 	_set_result_text("Fresh deck shuffled. Pick any facedown card from the deck." if reshuffled else "Pick any facedown card from the deck.", RESULT_NEUTRAL)
 	_set_deck_pick_enabled(true)
 
@@ -869,7 +858,7 @@ func _on_back_pressed() -> void:
 	_set_result_text("Choice canceled. Pick Higher or Lower.", RESULT_NEUTRAL)
 	_set_guess_buttons_enabled(true)
 
-func _on_deck_card_pressed(slot_index: int) -> void:
+func _on_deck_card_pressed(pressed_button: Button) -> void:
 	if not round_active or input_locked or !awaiting_deck_pick:
 		return
 	if _ensure_deck_for_pick():
@@ -877,7 +866,10 @@ func _on_deck_card_pressed(slot_index: int) -> void:
 
 	input_locked = true
 	_set_deck_pick_enabled(false)
+	var slot_index: int = pressed_button.get_index()
 	_consume_deck_visual_slot(slot_index)
+	_dismiss_incoming_overlay()
+	var fly_overlay: Control = await _animate_card_fly(pressed_button, pending_guess_higher)
 	var previous_card: Dictionary = current_card
 	var previous_value: int = Deck.card_value(previous_card)
 	var next_card: Dictionary = deck.draw()
@@ -891,13 +883,16 @@ func _on_deck_card_pressed(slot_index: int) -> void:
 
 	if pending_tie_bet:
 		pending_tie_bet = false
+		_free_overlay(fly_overlay)
 		await _resolve_tie_bet(pending_guess_higher, previous_value, next_card, next_value)
 		return
 
 	if next_value == previous_value:
+		incoming_overlay = fly_overlay
 		await _handle_tie(next_card)
 		return
 
+	_free_overlay(fly_overlay)
 	var guessed_right: bool = pending_guess_higher == (next_value > previous_value)
 	if guessed_right:
 		var correct_outcome: Dictionary = game_state.resolve_correct_guess(next_card)
@@ -1026,6 +1021,7 @@ func _resolve_tie_bet(player_said_higher: bool, bet_card_value: int, _next_card:
 	_set_guess_buttons_enabled(true)
 
 func _deal_new_card_after_tie() -> void:
+	_dismiss_incoming_overlay()
 	var reshuffled: bool = _draw_new_current_card()
 	card_panel.visible = true
 	await _animate_card_reveal(current_card)
@@ -1077,6 +1073,99 @@ func _handle_level_outcome(outcome: Dictionary) -> bool:
 
 func _get_run_score() -> int:
 	return 0 if game_state == null else game_state.run_score
+
+func _animate_card_fly(from_button: Button, guess_higher: bool) -> Control:
+	if not is_instance_valid(from_button):
+		return null
+
+	# Întoarce cartea cu fața în sus în deck înainte de zbor
+	var peeked_card: Dictionary = {}
+	if deck != null and not deck.cards.is_empty():
+		peeked_card = deck.cards.back()
+		_apply_deck_card_front(from_button, peeked_card)
+		await get_tree().create_timer(0.42).timeout
+
+	if not is_instance_valid(from_button):
+		return null
+
+	var overlay := Control.new()
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	get_tree().root.add_child(overlay)
+
+	# Fundal carte
+	var fly_bg := Panel.new()
+	fly_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var fly_style := StyleBoxFlat.new()
+	fly_style.bg_color = Color("f7f1df")
+	fly_style.corner_radius_top_left = 8
+	fly_style.corner_radius_top_right = 8
+	fly_style.corner_radius_bottom_right = 8
+	fly_style.corner_radius_bottom_left = 8
+	fly_bg.add_theme_stylebox_override("panel", fly_style)
+	overlay.add_child(fly_bg)
+
+	# Text carte (apare după aterizare)
+	var fly_label := Label.new()
+	fly_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	fly_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	fly_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	fly_label.add_theme_font_size_override("font_size", 18)
+	fly_label.modulate.a = 0.0
+	if not peeked_card.is_empty():
+		fly_label.text = "%s\n%s" % [Deck.rank_text(peeked_card), Deck.suit_symbol(peeked_card)]
+		fly_label.add_theme_color_override("font_color", Deck.suit_color(peeked_card))
+	overlay.add_child(fly_label)
+
+	# Rect sursă și destinație (deasupra sau dedesubt față de card_panel, mai mică)
+	var from_rect: Rect2 = from_button.get_global_rect()
+	var card_rect: Rect2 = card_panel.get_global_rect()
+	var viewport_h: float = get_viewport().get_visible_rect().size.y
+	var land_scale := 0.6
+	var land_size := card_rect.size * land_scale
+	var land_x := card_rect.position.x + (card_rect.size.x - land_size.x) * 0.5
+	var gap := 6.0
+	var dest_y: float
+	if guess_higher:
+		dest_y = maxf(0.0, card_rect.position.y - land_size.y - gap)
+	else:
+		dest_y = minf(viewport_h - land_size.y, card_rect.position.y + card_rect.size.y + gap)
+	var to_rect := Rect2(land_x, dest_y, land_size.x, land_size.y)
+
+	fly_bg.position = from_rect.position
+	fly_bg.size = from_rect.size
+	fly_label.position = from_rect.position
+	fly_label.size = from_rect.size
+	from_button.modulate.a = 0.0
+
+	var tween := create_tween()
+	tween.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+	tween.set_parallel(true)
+	tween.tween_property(fly_bg, "position", to_rect.position, 0.3)
+	tween.tween_property(fly_bg, "size", to_rect.size, 0.3)
+	tween.tween_property(fly_label, "position", to_rect.position, 0.3)
+	tween.tween_property(fly_label, "size", to_rect.size, 0.3)
+	await tween.finished
+
+	# Dezvăluie textul după aterizare
+	var fade_tween := create_tween()
+	fade_tween.tween_property(fly_label, "modulate:a", 1.0, 0.15)
+	await fade_tween.finished
+
+	return overlay
+
+func _free_overlay(overlay: Control) -> void:
+	if overlay == null or not is_instance_valid(overlay):
+		return
+	var t := create_tween()
+	t.tween_property(overlay, "modulate:a", 0.0, 0.2)
+	t.tween_callback(overlay.queue_free)
+
+func _dismiss_incoming_overlay() -> void:
+	if incoming_overlay == null:
+		return
+	_free_overlay(incoming_overlay)
+	incoming_overlay = null
 
 func _animate_card_reveal(card: Dictionary) -> void:
 	_refresh_pivots()
@@ -1139,6 +1228,7 @@ func _animate_streak() -> void:
 	tween.tween_property(streak_label, "scale", Vector2.ONE, 0.1)
 
 func _finish_run(message: String, won: bool) -> void:
+	_dismiss_incoming_overlay()
 	round_active = false
 	input_locked = false
 	awaiting_deck_pick = false

@@ -11,17 +11,17 @@ const REWARD_NONE := ""
 const REWARD_LIFE := "life"
 const REWARD_DRAWS := "draws"
 const LEVEL_CONFIGS: Array[Dictionary] = [
-	{"target": 5, "draw_limit": 10},
-	{"target": 6, "draw_limit": 9},
+	{"target": 5, "draw_limit": 8},
+	{"target": 6, "draw_limit": 8},
 	{"target": 7, "draw_limit": 8},
 	{"target": 8, "draw_limit": 8},
-	{"target": 8, "draw_limit": 9, "modifier": MODIFIER_ROYAL_BONUS},
+	{"target": 8, "draw_limit": 8, "modifier": MODIFIER_ROYAL_BONUS},
 	{"target": 9, "draw_limit": 8},
-	{"target": 9, "draw_limit": 9},
-	{"target": 6, "draw_limit": 11, "modifier": MODIFIER_BLACKOUT},
+	{"target": 9, "draw_limit": 8},
+	{"target": 6, "draw_limit": 9, "modifier": MODIFIER_BLACKOUT},
+	{"target": 10, "draw_limit": 8},
 	{"target": 10, "draw_limit": 9},
-	{"target": 10, "draw_limit": 10},
-	{"target": 9, "draw_limit": 11, "modifier": MODIFIER_PRECISION},
+	{"target": 9, "draw_limit": 9, "modifier": MODIFIER_PRECISION},
 ]
 const NEXT_LEVEL_BONUS_DRAWS := 3
 const BONUS_UNLOCK_INTERVAL := 3
@@ -243,6 +243,7 @@ func _evaluate_attempt(was_tie: bool, awarded_points: int) -> Dictionary:
 
 	if draws_used >= get_level_draw_limit():
 		lives -= 1
+		current_streak = 0
 		result["level_failed"] = true
 		result["life_lost"] = true
 		result["lives_left"] = lives

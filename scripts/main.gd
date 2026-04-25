@@ -11,6 +11,9 @@ const SFX_SAMPLE_RATE := 44100.0
 const SFX_BUFFER_LENGTH := 0.6
 const MEDIUM_STREAK_THRESHOLD := 5
 const HIGH_STREAK_THRESHOLD := 10
+const CardViewScript := preload("res://scripts/card_view.gd")
+const DeckViewScript := preload("res://scripts/deck_view.gd")
+const RunHudScript := preload("res://scripts/run_hud.gd")
 
 var deck: Deck
 var game_state: GameState
@@ -30,16 +33,16 @@ var pending_level_intro_message: String = ""
 var pending_level_outcome: Dictionary = {}
 var pending_reward_message: String = ""
 var shake_tween: Tween
-var bonus_banner_tween: Tween
 var streak_bar: ProgressBar
-var streak_bar_tween: Tween
 var card_sfx_player: AudioStreamPlayer
 var success_sfx_player: AudioStreamPlayer
 var fail_sfx_player: AudioStreamPlayer
 var effects_layer: Control
 var incoming_overlay: Control = null
-var deck_visual_slots: Array[bool] = []
 var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+var card_view
+var deck_view
+var run_hud
 
 @onready var background: ColorRect = %Background
 @onready var deck_grid: GridContainer = %DeckGrid
@@ -80,6 +83,7 @@ var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 func _ready() -> void:
 	_setup_audio()
 	_setup_effects_layer()
+	_setup_views()
 	rng.randomize()
 	mute_button.pressed.connect(_on_mute_pressed)
 	higher_button.pressed.connect(_on_higher)
@@ -99,6 +103,33 @@ func _ready() -> void:
 	_restructure_layout()
 	_create_streak_bar()
 	_show_start_state()
+
+func _setup_views() -> void:
+	card_view = CardViewScript.new()
+	card_view.setup(
+		card_panel,
+		card_label,
+		card_suit_center,
+		corner_rank_top,
+		corner_suit_top,
+		corner_rank_bottom,
+		corner_suit_bottom
+	)
+	deck_view = DeckViewScript.new()
+	deck_view.setup(deck_grid, deck_label)
+	run_hud = RunHudScript.new()
+	run_hud.setup(
+		background,
+		score_label,
+		high_score_label,
+		remaining_label,
+		streak_label,
+		bonus_banner,
+		bonus_banner_label,
+		modifier_banner,
+		modifier_banner_label,
+		deck_label
+	)
 
 func start_game() -> void:
 	deck_reveal_generation += 1
@@ -156,7 +187,7 @@ func _show_start_state() -> void:
 	_reset_level_overlay_state()
 	game_state = null
 	current_card = {}
-	deck_visual_slots.clear()
+	deck_view.clear_slots()
 	card_panel.scale = Vector2.ONE
 	card_panel.visible = true
 	_apply_card_back()
@@ -169,43 +200,9 @@ func _show_start_state() -> void:
 	_set_guess_buttons_enabled(false)
 
 func _update_status_labels() -> void:
-	var run_score: int = 0 if game_state == null else game_state.run_score
-	var active_multiplier: int = 1 if game_state == null else game_state.get_streak_multiplier()
-	var modifier_label: String = "" if game_state == null else game_state.get_level_modifier_label()
-	var modifier_description: String = "" if game_state == null else game_state.get_level_modifier_description()
-	if modifier_label == "Precision" and game_state != null:
-		score_label.text = "Run: %d  Precision: %d/2" % [run_score, game_state.get_precision_chain()]
-	else:
-		score_label.text = "Run: %d  Mult: x%d" % [run_score, active_multiplier]
-	high_score_label.text = "Best: %d" % high_score
-	var bonus_draws: int = 0 if game_state == null else game_state.get_active_bonus_draws()
-	var _cards_left: int = _get_cards_left_for_display()
-	if game_state == null:
-		remaining_label.text = "Level: 1  Lives: %d" % GameState.DEFAULT_LIVES
-		streak_label.text = "Goal: 0 / 5  Draws: 0 / 10"
-	else:
-		remaining_label.text = "Level: %d  Lives: %d" % [game_state.get_level_number(), game_state.lives]
-		streak_label.text = "Goal: %d / %d  Draws: %d / %d  Streak: %d" % [
-			game_state.level_score,
-			game_state.get_level_target(),
-			game_state.draws_used,
-			game_state.get_level_draw_limit(),
-			game_state.current_streak,
-		]
-	if bonus_draws > 0:
-		remaining_label.text += "  Bonus: +%d draws" % bonus_draws
-	var streak_color: Color = Color("f5f1da")
-	var streak_value: int = 0 if game_state == null else game_state.current_streak
-	if streak_value >= 10:
-		streak_color = Color("ffd166")
-	elif streak_value >= 5:
-		streak_color = Color("ffe29a")
-	streak_label.add_theme_color_override("font_color", streak_color)
-	_set_bonus_banner_state(bonus_draws)
-	_set_modifier_banner_state(modifier_label, modifier_description)
+	run_hud.update(game_state, high_score, self)
 	_update_deck_label()
 	_rebuild_deck_view()
-	_update_streak_bar(streak_value)
 
 func _restructure_layout() -> void:
 	var game_margin: MarginContainer = $GameMargin
@@ -314,6 +311,7 @@ func _create_streak_bar() -> void:
 
 	left_col.add_child(streak_bar)
 	_apply_streak_bar_fill_style(0)
+	run_hud.streak_bar = streak_bar
 
 func _streak_bar_color(streak: int) -> Color:
 	if streak >= HIGH_STREAK_THRESHOLD:
@@ -334,16 +332,6 @@ func _apply_streak_bar_fill_style(streak: int) -> void:
 	fill_style.corner_radius_bottom_right = 5
 	fill_style.corner_radius_bottom_left = 5
 	streak_bar.add_theme_stylebox_override("fill", fill_style)
-
-func _update_streak_bar(streak: int) -> void:
-	if streak_bar == null:
-		return
-	_apply_streak_bar_fill_style(streak)
-	if streak_bar_tween != null:
-		streak_bar_tween.kill()
-	streak_bar_tween = create_tween()
-	streak_bar_tween.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	streak_bar_tween.tween_property(streak_bar, "value", float(mini(streak, HIGH_STREAK_THRESHOLD)), 0.25)
 
 func _current_level_brief() -> String:
 	if game_state == null:
@@ -403,22 +391,16 @@ func _remove_card_from_deck(card: Dictionary) -> void:
 			return
 
 func _reset_deck_visual_slots() -> void:
-	deck_visual_slots.clear()
 	if deck == null:
+		deck_view.clear_slots()
 		return
-	for _slot in range(deck.cards_left()):
-		deck_visual_slots.append(true)
+	deck_view.reset_slots(deck.cards_left())
 
 func _consume_deck_visual_slot(slot_index: int) -> void:
-	if slot_index < 0 or slot_index >= deck_visual_slots.size():
-		return
-	deck_visual_slots[slot_index] = false
+	deck_view.consume_slot(slot_index)
 
 func _consume_next_visual_slot() -> void:
-	for index in range(deck_visual_slots.size() - 1, -1, -1):
-		if deck_visual_slots[index]:
-			deck_visual_slots[index] = false
-			return
+	deck_view.consume_next_slot()
 
 func _draw_new_current_card() -> bool:
 	if deck == null or deck.is_empty():
@@ -433,47 +415,6 @@ func _reshuffle_after_reveal_if_needed() -> bool:
 		return false
 	_reshuffle_deck_around_current_card()
 	return true
-
-func _set_bonus_banner_state(bonus_draws: int) -> void:
-	var has_bonus: bool = bonus_draws > 0
-	bonus_banner.visible = has_bonus
-	if has_bonus:
-		bonus_banner_label.text = "Bonus Active: +%d draws this level" % bonus_draws
-	else:
-		bonus_banner_label.text = ""
-
-	var table_color: Color = Color("0f703e") if has_bonus else Color("155835")
-	background.color = table_color
-	deck_label.add_theme_color_override("font_color", Color("ffd166") if has_bonus else Color("f5f1da"))
-
-	if bonus_banner_tween != null:
-		bonus_banner_tween.kill()
-		bonus_banner_tween = null
-
-	if not has_bonus:
-		bonus_banner.scale = Vector2.ONE
-		return
-
-	bonus_banner.scale = Vector2.ONE
-	bonus_banner_tween = create_tween()
-	bonus_banner_tween.set_loops()
-	bonus_banner_tween.tween_property(bonus_banner, "scale", Vector2(1.015, 1.015), 0.65)
-	bonus_banner_tween.tween_property(bonus_banner, "scale", Vector2.ONE, 0.65)
-
-func _set_modifier_banner_state(modifier_label: String, modifier_description: String) -> void:
-	var has_modifier: bool = not modifier_label.is_empty()
-	modifier_banner.visible = has_modifier
-	if has_modifier:
-		var short_hint: String = modifier_description
-		if modifier_label == "Royal Bonus":
-			short_hint = "J, Q, K, and A give +1 point"
-		elif modifier_label == "Blackout":
-			short_hint = "Only black revealed cards score"
-		elif modifier_label == "Precision":
-			short_hint = "2 correct in a row = 3 points"
-		modifier_banner_label.text = "Modifier: %s | %s" % [modifier_label, short_hint]
-	else:
-		modifier_banner_label.text = ""
 
 func _reset_level_overlay_state() -> void:
 	pending_level_outcome = {}
@@ -536,14 +477,7 @@ func _refresh_level_overlay_content() -> void:
 		reward_hint_label.text = ""
 
 func _update_deck_label() -> void:
-	if start_overlay.visible:
-		deck_label.text = "Deck"
-	elif remaining_deck_reveal_in_progress or (remaining_deck_revealed and !round_active):
-		deck_label.text = "Remaining Cards"
-	elif awaiting_deck_pick:
-		deck_label.text = "Pick a Card"
-	else:
-		deck_label.text = "Deck"
+	deck_view.update_label(start_overlay.visible, remaining_deck_reveal_in_progress, remaining_deck_revealed, round_active, awaiting_deck_pick)
 
 func _get_cards_left_for_display() -> int:
 	if deck == null or current_card.is_empty():
@@ -551,87 +485,16 @@ func _get_cards_left_for_display() -> int:
 	return deck.cards_left()
 
 func _rebuild_deck_view() -> void:
-	for child: Node in deck_grid.get_children():
-		deck_grid.remove_child(child)
-		child.queue_free()
-
-	var slot_count: int = deck_visual_slots.size()
-	if slot_count == 0 and deck != null and deck.cards_left() > 0 and !current_card.is_empty():
-		_reset_deck_visual_slots()
-		slot_count = deck_visual_slots.size()
-	var reveal_remaining_cards: bool = _should_show_remaining_deck_fronts()
-	var remaining_card_index: int = 0
-	for index in range(slot_count):
-		if !deck_visual_slots[index]:
-			var empty_slot: Control = Control.new()
-			empty_slot.custom_minimum_size = Vector2(34, 50)
-			empty_slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			deck_grid.add_child(empty_slot)
-			continue
-
-		var deck_button: Button = Button.new()
-		deck_button.custom_minimum_size = Vector2(50, 70)
-		deck_button.focus_mode = Control.FOCUS_NONE
-		if reveal_remaining_cards and deck != null and remaining_card_index < deck.cards.size():
-			var remaining_card: Dictionary = deck.cards[remaining_card_index]
-			remaining_card_index += 1
-			_apply_deck_card_front(deck_button, remaining_card)
-		else:
-			_apply_deck_card_back(deck_button)
-			deck_button.pressed.connect(_on_deck_card_pressed.bind(deck_button))
-		deck_grid.add_child(deck_button)
-
-func _make_deck_card_style(fill_color: Color, border_color: Color) -> StyleBoxFlat:
-	var style: StyleBoxFlat = StyleBoxFlat.new()
-	style.bg_color = fill_color
-	style.border_width_left = 1
-	style.border_width_top = 1
-	style.border_width_right = 1
-	style.border_width_bottom = 1
-	style.border_color = border_color
-	style.corner_radius_top_left = 6
-	style.corner_radius_top_right = 6
-	style.corner_radius_bottom_right = 6
-	style.corner_radius_bottom_left = 6
-	return style
+	deck_view.rebuild(deck, current_card, round_active, awaiting_deck_pick, _should_show_remaining_deck_fronts(), Callable(self, "_on_deck_card_pressed"))
 
 func _should_show_remaining_deck_fronts() -> bool:
 	return !round_active and !start_overlay.visible and deck != null and !current_card.is_empty() and remaining_deck_revealed
 
 func _apply_deck_card_back(deck_button: Button) -> void:
-	deck_button.text = "HI\nLO"
-	deck_button.disabled = !awaiting_deck_pick or !round_active
-	deck_button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND if awaiting_deck_pick and round_active else Control.CURSOR_ARROW
-	var is_pick_state: bool = awaiting_deck_pick and round_active
-	var base_fill: Color = Color("24575a") if is_pick_state else Color("173246")
-	var hover_fill: Color = Color("2f7376") if is_pick_state else Color("23516f")
-	var pressed_fill: Color = Color("183e40") if is_pick_state else Color("102635")
-	var border_color: Color = Color("ffd166") if is_pick_state else Color(0.952941, 0.945098, 0.831373, 0.24)
-	var disabled_border: Color = Color(0.952941, 0.945098, 0.831373, 0.32) if is_pick_state else Color(0.952941, 0.945098, 0.831373, 0.14)
-	deck_button.add_theme_stylebox_override("normal", _make_deck_card_style(base_fill, border_color))
-	deck_button.add_theme_stylebox_override("hover", _make_deck_card_style(hover_fill, Color("ffe6a7")))
-	deck_button.add_theme_stylebox_override("pressed", _make_deck_card_style(pressed_fill, Color(1.0, 0.901961, 0.654902, 0.6)))
-	deck_button.add_theme_stylebox_override("disabled", _make_deck_card_style(base_fill, disabled_border))
-	deck_button.add_theme_color_override("font_color", Color("f3edd1"))
-	deck_button.add_theme_color_override("font_hover_color", Color("fff7de"))
-	deck_button.add_theme_color_override("font_pressed_color", Color("f3edd1"))
-	deck_button.add_theme_color_override("font_disabled_color", Color(0.952941, 0.945098, 0.831373, 0.55))
-	deck_button.add_theme_font_size_override("font_size", 10)
+	deck_view.apply_card_back(deck_button, awaiting_deck_pick, round_active)
 
 func _apply_deck_card_front(deck_button: Button, card: Dictionary) -> void:
-	var suit_color: Color = Deck.suit_color(card)
-	deck_button.text = "%s\n%s" % [Deck.rank_text(card), Deck.suit_symbol(card)]
-	deck_button.disabled = true
-	deck_button.mouse_default_cursor_shape = Control.CURSOR_ARROW
-	deck_button.add_theme_stylebox_override("normal", _make_deck_card_style(Color("f7f1df"), Color(0.14902, 0.184314, 0.231373, 0.22)))
-	deck_button.add_theme_stylebox_override("hover", _make_deck_card_style(Color("f7f1df"), Color(0.14902, 0.184314, 0.231373, 0.22)))
-	deck_button.add_theme_stylebox_override("pressed", _make_deck_card_style(Color("f7f1df"), Color(0.14902, 0.184314, 0.231373, 0.22)))
-	deck_button.add_theme_stylebox_override("disabled", _make_deck_card_style(Color("f7f1df"), Color(0.14902, 0.184314, 0.231373, 0.22)))
-	deck_button.add_theme_color_override("font_color", suit_color)
-	deck_button.add_theme_color_override("font_hover_color", suit_color)
-	deck_button.add_theme_color_override("font_pressed_color", suit_color)
-	deck_button.add_theme_color_override("font_disabled_color", suit_color)
-	deck_button.add_theme_font_size_override("font_size", 11)
+	deck_view.apply_card_front(deck_button, card)
 
 func _start_remaining_deck_reveal() -> void:
 	if remaining_deck_revealed or remaining_deck_reveal_in_progress:
@@ -642,11 +505,7 @@ func _start_remaining_deck_reveal() -> void:
 	_update_deck_label()
 	var generation: int = deck_reveal_generation
 	var cards_snapshot: Array[Dictionary] = deck.cards.duplicate(true)
-	var deck_buttons: Array[Button] = []
-	for child: Node in deck_grid.get_children():
-		var deck_button: Button = child as Button
-		if deck_button != null:
-			deck_buttons.append(deck_button)
+	var deck_buttons: Array[Button] = deck_view.get_deck_buttons()
 
 	var reveal_count: int = mini(deck_buttons.size(), cards_snapshot.size())
 	for index in range(reveal_count):
@@ -672,43 +531,7 @@ func _start_remaining_deck_reveal() -> void:
 	_update_deck_label()
 
 func _animate_deck_card_flip(deck_button: Button, card: Dictionary, generation: int) -> bool:
-	if not is_instance_valid(deck_button) or _is_deck_reveal_cancelled(generation):
-		return false
-	deck_button.pivot_offset = deck_button.custom_minimum_size / 2.0
-	deck_button.scale = Vector2.ONE
-	deck_button.rotation = 0.0
-	var close_tween: Tween = create_tween()
-	close_tween.bind_node(deck_button)
-	close_tween.set_trans(Tween.TRANS_CUBIC)
-	close_tween.set_ease(Tween.EASE_IN)
-	close_tween.set_parallel(true)
-	close_tween.tween_property(deck_button, "scale", Vector2(0.05, 1.07), 0.05)
-	close_tween.tween_property(deck_button, "rotation", -0.08, 0.05)
-	await close_tween.finished
-	if not is_instance_valid(deck_button) or _is_deck_reveal_cancelled(generation):
-		return false
-
-	_apply_deck_card_front(deck_button, card)
-
-	var open_tween: Tween = create_tween()
-	open_tween.bind_node(deck_button)
-	open_tween.set_trans(Tween.TRANS_BACK)
-	open_tween.set_ease(Tween.EASE_OUT)
-	open_tween.set_parallel(true)
-	open_tween.tween_property(deck_button, "scale", Vector2(1.12, 0.97), 0.08)
-	open_tween.tween_property(deck_button, "rotation", 0.06, 0.08)
-	await open_tween.finished
-	if not is_instance_valid(deck_button) or _is_deck_reveal_cancelled(generation):
-		return false
-
-	var settle_tween: Tween = create_tween()
-	settle_tween.bind_node(deck_button)
-	settle_tween.set_trans(Tween.TRANS_SINE)
-	settle_tween.set_ease(Tween.EASE_OUT)
-	settle_tween.set_parallel(true)
-	settle_tween.tween_property(deck_button, "scale", Vector2.ONE, 0.04)
-	settle_tween.tween_property(deck_button, "rotation", 0.0, 0.04)
-	return true
+	return await deck_view.animate_card_flip(self, deck_button, card, Callable(self, "_is_deck_reveal_cancelled").bind(generation))
 
 func _is_deck_reveal_cancelled(generation: int) -> bool:
 	return generation != deck_reveal_generation or round_active or start_overlay.visible or deck == null
@@ -718,38 +541,10 @@ func _stop_remaining_deck_reveal() -> void:
 	_update_deck_label()
 
 func _apply_card_visual(card: Dictionary) -> void:
-	var rank_text: String = Deck.rank_text(card)
-	var suit_symbol: String = Deck.suit_symbol(card)
-	var suit_color: Color = Deck.suit_color(card)
-	card_panel.modulate = Color(1.0, 1.0, 1.0, 1.0)
-	card_label.text = rank_text
-	card_suit_center.text = suit_symbol
-	corner_rank_top.text = rank_text
-	corner_suit_top.text = suit_symbol
-	corner_rank_bottom.text = rank_text
-	corner_suit_bottom.text = suit_symbol
-	card_label.add_theme_color_override("font_color", suit_color)
-	card_suit_center.add_theme_color_override("font_color", suit_color)
-	corner_rank_top.add_theme_color_override("font_color", suit_color)
-	corner_suit_top.add_theme_color_override("font_color", suit_color)
-	corner_rank_bottom.add_theme_color_override("font_color", suit_color)
-	corner_suit_bottom.add_theme_color_override("font_color", suit_color)
+	card_view.apply_card(card)
 
 func _apply_card_back() -> void:
-	var back_color: Color = Color("16202a")
-	card_panel.modulate = Color(1.0, 1.0, 1.0, 1.0)
-	card_label.text = "?"
-	card_suit_center.text = "?"
-	corner_rank_top.text = "?"
-	corner_suit_top.text = ""
-	corner_rank_bottom.text = "?"
-	corner_suit_bottom.text = ""
-	card_label.add_theme_color_override("font_color", back_color)
-	card_suit_center.add_theme_color_override("font_color", back_color)
-	corner_rank_top.add_theme_color_override("font_color", back_color)
-	corner_suit_top.add_theme_color_override("font_color", back_color)
-	corner_rank_bottom.add_theme_color_override("font_color", back_color)
-	corner_suit_bottom.add_theme_color_override("font_color", back_color)
+	card_view.apply_back()
 
 func _set_result_text(message: String, color: Color) -> void:
 	result_label.text = message
@@ -776,34 +571,17 @@ func _set_guess_buttons_enabled(is_enabled: bool) -> void:
 func _set_deck_pick_enabled(is_enabled: bool) -> void:
 	awaiting_deck_pick = is_enabled
 	back_button.visible = is_enabled and round_active and !input_locked
-	for child: Node in deck_grid.get_children():
-		var deck_button: Button = child as Button
-		if deck_button != null:
-			deck_button.disabled = !is_enabled or !round_active
+	deck_view.set_pick_enabled(is_enabled, round_active)
 
 func _reset_choice_slots() -> void:
 	pass
 
 func _apply_empty_center_slot() -> void:
-	var placeholder_color: Color = Color(0.086275, 0.12549, 0.164706, 0.38)
-	card_panel.visible = true
-	card_panel.modulate = Color(1.0, 1.0, 1.0, 0.45)
-	card_label.text = ""
-	card_suit_center.text = ""
-	corner_rank_top.text = ""
-	corner_suit_top.text = ""
-	corner_rank_bottom.text = ""
-	corner_suit_bottom.text = ""
-	card_label.add_theme_color_override("font_color", placeholder_color)
-	card_suit_center.add_theme_color_override("font_color", placeholder_color)
-	corner_rank_top.add_theme_color_override("font_color", placeholder_color)
-	corner_suit_top.add_theme_color_override("font_color", placeholder_color)
-	corner_rank_bottom.add_theme_color_override("font_color", placeholder_color)
-	corner_suit_bottom.add_theme_color_override("font_color", placeholder_color)
+	card_view.apply_empty()
 
 func _refresh_pivots() -> void:
-	card_panel.pivot_offset = card_panel.size / 2.0
-	streak_label.pivot_offset = streak_label.size / 2.0
+	card_view.refresh_pivot()
+	run_hud.refresh_pivot()
 
 func _on_higher() -> void:
 	guess(true)
@@ -1168,64 +946,10 @@ func _dismiss_incoming_overlay() -> void:
 	incoming_overlay = null
 
 func _animate_card_reveal(card: Dictionary) -> void:
-	_refresh_pivots()
-	card_panel.scale = Vector2.ONE
-	card_panel.rotation = 0.0
-	card_panel.modulate = Color(1.0, 1.0, 1.0, 1.0)
-	_play_card_sound()
-
-	var close_front: Tween = create_tween()
-	close_front.set_trans(Tween.TRANS_CUBIC)
-	close_front.set_ease(Tween.EASE_IN)
-	close_front.set_parallel(true)
-	close_front.tween_property(card_panel, "scale", Vector2(0.02, 1.08), 0.08)
-	close_front.tween_property(card_panel, "rotation", -0.09, 0.08)
-	close_front.tween_property(card_panel, "modulate", Color(0.82, 0.82, 0.82, 1.0), 0.08)
-	await close_front.finished
-
-	_apply_card_back()
-	var show_back: Tween = create_tween()
-	show_back.set_trans(Tween.TRANS_CUBIC)
-	show_back.set_ease(Tween.EASE_OUT)
-	show_back.set_parallel(true)
-	show_back.tween_property(card_panel, "scale", Vector2(0.78, 1.02), 0.06)
-	show_back.tween_property(card_panel, "rotation", 0.07, 0.06)
-	show_back.tween_property(card_panel, "modulate", Color(0.9, 0.9, 0.9, 1.0), 0.06)
-	await show_back.finished
-
-	var hide_back: Tween = create_tween()
-	hide_back.set_trans(Tween.TRANS_CUBIC)
-	hide_back.set_ease(Tween.EASE_IN)
-	hide_back.set_parallel(true)
-	hide_back.tween_property(card_panel, "scale", Vector2(0.02, 1.08), 0.06)
-	hide_back.tween_property(card_panel, "rotation", -0.08, 0.06)
-	hide_back.tween_property(card_panel, "modulate", Color(0.82, 0.82, 0.82, 1.0), 0.06)
-	await hide_back.finished
-
-	_apply_card_visual(card)
-	var open_front: Tween = create_tween()
-	open_front.set_trans(Tween.TRANS_BACK)
-	open_front.set_ease(Tween.EASE_OUT)
-	open_front.set_parallel(true)
-	open_front.tween_property(card_panel, "scale", Vector2(1.08, 0.97), 0.12)
-	open_front.tween_property(card_panel, "rotation", 0.08, 0.12)
-	open_front.tween_property(card_panel, "modulate", Color(1.0, 1.0, 1.0, 1.0), 0.12)
-	await open_front.finished
-
-	var settle_front: Tween = create_tween()
-	settle_front.set_trans(Tween.TRANS_SINE)
-	settle_front.set_ease(Tween.EASE_OUT)
-	settle_front.set_parallel(true)
-	settle_front.tween_property(card_panel, "scale", Vector2.ONE, 0.06)
-	settle_front.tween_property(card_panel, "rotation", 0.0, 0.06)
-	await settle_front.finished
+	await card_view.animate_reveal(self, card, Callable(self, "_play_card_sound"))
 
 func _animate_streak() -> void:
-	_refresh_pivots()
-	streak_label.scale = Vector2.ONE
-	var tween: Tween = create_tween()
-	tween.tween_property(streak_label, "scale", Vector2(1.12, 1.12), 0.08)
-	tween.tween_property(streak_label, "scale", Vector2.ONE, 0.1)
+	run_hud.animate_streak(self)
 
 func _finish_run(message: String, won: bool) -> void:
 	_dismiss_incoming_overlay()

@@ -17,6 +17,7 @@ var deck_label: Label
 var streak_bar: ProgressBar
 var bonus_banner_tween: Tween
 var streak_bar_tween: Tween
+var momentum_tween: Tween
 
 func setup(
 	background_node: ColorRect,
@@ -70,6 +71,7 @@ func update(game_state: GameState, high_score: int, owner: Control) -> void:
 	var active_multiplier: int = 1 if game_state == null else game_state.get_streak_multiplier()
 	var modifier_label: String = "" if game_state == null else game_state.get_level_modifier_label()
 	var modifier_description: String = "" if game_state == null else game_state.get_level_modifier_description()
+	var streak_value: int = 0 if game_state == null else game_state.current_streak
 	if modifier_label == "Precision" and game_state != null:
 		score_label.text = "Run: %d  Precision: %d/2" % [run_score, game_state.get_precision_chain()]
 	else:
@@ -92,7 +94,6 @@ func update(game_state: GameState, high_score: int, owner: Control) -> void:
 	if bonus_draws > 0:
 		remaining_label.text += "  Bonus: +%d draws" % bonus_draws
 
-	var streak_value: int = 0 if game_state == null else game_state.current_streak
 	var streak_color: Color = Color("f5f1da")
 	if streak_value >= 10:
 		streak_color = Color("ffd166")
@@ -102,6 +103,7 @@ func update(game_state: GameState, high_score: int, owner: Control) -> void:
 	_set_bonus_banner_state(bonus_draws, owner)
 	_set_modifier_banner_state(modifier_label, modifier_description)
 	_update_streak_bar(streak_value, owner)
+	_apply_momentum(streak_value, bonus_draws, owner)
 
 func refresh_pivot() -> void:
 	streak_label.pivot_offset = streak_label.size / 2.0
@@ -121,10 +123,6 @@ func _set_bonus_banner_state(bonus_draws: int, owner: Control) -> void:
 	else:
 		bonus_banner_label.text = ""
 
-	var table_color: Color = Color("0f703e") if has_bonus else Color("155835")
-	background.color = table_color
-	deck_label.add_theme_color_override("font_color", Color("ffd166") if has_bonus else Color("f5f1da"))
-
 	if bonus_banner_tween != null:
 		bonus_banner_tween.kill()
 		bonus_banner_tween = null
@@ -138,6 +136,37 @@ func _set_bonus_banner_state(bonus_draws: int, owner: Control) -> void:
 	bonus_banner_tween.set_loops()
 	bonus_banner_tween.tween_property(bonus_banner, "scale", Vector2(1.015, 1.015), 0.65)
 	bonus_banner_tween.tween_property(bonus_banner, "scale", Vector2.ONE, 0.65)
+
+func _apply_momentum(streak: int, bonus_draws: int, owner: Control) -> void:
+	var table_color: Color = Color("0f703e") if bonus_draws > 0 else Color("155835")
+	var deck_color: Color = Color("ffd166") if bonus_draws > 0 else Color("f5f1da")
+	var score_color: Color = Color("f5f1da")
+	var high_score_color: Color = Color("f5f1da")
+	var remaining_color: Color = Color("f5f1da")
+
+	if streak >= HIGH_STREAK_THRESHOLD:
+		table_color = Color("7b2215") if bonus_draws <= 0 else Color("7a4d0f")
+		deck_color = Color("ffe8a3")
+		score_color = Color("ffe29a")
+		high_score_color = Color("ffd166")
+		remaining_color = Color("fff1c2")
+	elif streak >= MEDIUM_STREAK_THRESHOLD:
+		table_color = Color("7a4a12") if bonus_draws <= 0 else Color("87620f")
+		deck_color = Color("ffe29a")
+		score_color = Color("fff1c2")
+		high_score_color = Color("ffe29a")
+		remaining_color = Color("f7f0d7")
+
+	if momentum_tween != null:
+		momentum_tween.kill()
+	momentum_tween = owner.create_tween()
+	momentum_tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	momentum_tween.tween_property(background, "color", table_color, 0.25)
+
+	deck_label.add_theme_color_override("font_color", deck_color)
+	score_label.add_theme_color_override("font_color", score_color)
+	high_score_label.add_theme_color_override("font_color", high_score_color)
+	remaining_label.add_theme_color_override("font_color", remaining_color)
 
 func _set_modifier_banner_state(modifier_label: String, modifier_description: String) -> void:
 	var has_modifier: bool = not modifier_label.is_empty()

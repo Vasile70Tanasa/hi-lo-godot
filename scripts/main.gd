@@ -11,6 +11,7 @@ const SFX_SAMPLE_RATE := 44100.0
 const SFX_BUFFER_LENGTH := 0.6
 const MEDIUM_STREAK_THRESHOLD := 5
 const HIGH_STREAK_THRESHOLD := 10
+const DRAMATIC_FAIL_THRESHOLD := 5
 const CardViewScript := preload("res://scripts/card_view.gd")
 const DeckViewScript := preload("res://scripts/deck_view.gd")
 const RunHudScript := preload("res://scripts/run_hud.gd")
@@ -201,6 +202,7 @@ func _show_start_state() -> void:
 
 func _update_status_labels() -> void:
 	run_hud.update(game_state, high_score, self)
+	card_view.apply_streak_momentum(0 if game_state == null else game_state.current_streak)
 	_update_deck_label()
 	_rebuild_deck_view()
 
@@ -216,12 +218,15 @@ func _restructure_layout() -> void:
 
 	# LEFT: carta mare + streak bar vertical (HBox)
 	var left_col := HBoxContainer.new()
+	left_col.custom_minimum_size = Vector2(228, 0)
+	left_col.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	left_col.add_theme_constant_override("separation", 8)
 	left_col.alignment = BoxContainer.ALIGNMENT_CENTER
 	main_hbox.add_child(left_col)
 
 	# DECK: imediat lângă carte (VBox)
 	var deck_section := VBoxContainer.new()
+	deck_section.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	deck_section.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	deck_section.add_theme_constant_override("separation", 8)
 	main_hbox.add_child(deck_section)
@@ -230,6 +235,7 @@ func _restructure_layout() -> void:
 	var center_col := VBoxContainer.new()
 	center_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	center_col.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	center_col.size_flags_stretch_ratio = 0.75
 	center_col.add_theme_constant_override("separation", 12)
 	center_col.alignment = BoxContainer.ALIGNMENT_CENTER
 	main_hbox.add_child(center_col)
@@ -254,9 +260,11 @@ func _restructure_layout() -> void:
 
 	# Reparentăm nodurile în ordinea dorită în centru
 	title_node.reparent(center_col)
+	title_node.size_flags_horizontal = Control.SIZE_FILL
 	subtitle_label.reparent(center_col)
+	subtitle_label.size_flags_horizontal = Control.SIZE_FILL
 	result_label.reparent(center_col)
-	back_button.reparent(center_col)
+	result_label.size_flags_horizontal = Control.SIZE_FILL
 	play_again_button.reparent(center_col)
 	$GameMargin/GameVBox/TopBar.reparent(center_col)
 	bonus_banner.reparent(center_col)
@@ -271,13 +279,20 @@ func _restructure_layout() -> void:
 	deck_section.add_child(deck_row)
 
 	var buttons_col := VBoxContainer.new()
+	buttons_col.custom_minimum_size = Vector2(120, 0)
 	buttons_col.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	buttons_col.add_theme_constant_override("separation", 8)
+	buttons_col.alignment = BoxContainer.ALIGNMENT_CENTER
 	deck_row.add_child(buttons_col)
 
 	higher_button.reparent(buttons_col)
+	higher_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	higher_button.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	back_button.reparent(buttons_col)
+	back_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	back_button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	lower_button.reparent(buttons_col)
+	lower_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	lower_button.size_flags_vertical = Control.SIZE_EXPAND_FILL
 
 	deck_grid.reparent(deck_row)
@@ -714,12 +729,15 @@ func _on_deck_card_pressed(pressed_button: Button) -> void:
 		input_locked = false
 		_set_guess_buttons_enabled(true)
 	else:
+		var previous_streak: int = 0 if game_state == null else game_state.current_streak
 		var wrong_outcome: Dictionary = game_state.resolve_wrong_guess()
 		_update_status_labels()
-		var fail_text: String = "Wrong! %s" % comparison_text
-		if reshuffled_after_reveal:
-			fail_text += " Fresh deck shuffled."
-		_set_result_text(fail_text, RESULT_FAIL)
+		var had_dramatic_fail: bool = await _play_dramatic_fail(previous_streak, comparison_text, reshuffled_after_reveal)
+		if not had_dramatic_fail:
+			var fail_text: String = "Wrong! %s" % comparison_text
+			if reshuffled_after_reveal:
+				fail_text += " Fresh deck shuffled."
+			_set_result_text(fail_text, RESULT_FAIL)
 		if await _handle_level_outcome(wrong_outcome):
 			return
 		await get_tree().create_timer(0.55).timeout
@@ -766,8 +784,27 @@ func _handle_tie(tie_card: Dictionary) -> void:
 
 func _resolve_tie_bet(player_said_higher: bool, bet_card_value: int, _next_card: Dictionary, next_value: int) -> void:
 	if next_value == bet_card_value:
+		var tie_count_before: int = game_state.consecutive_ties
+		var tie_outcome: Dictionary = game_state.resolve_tie()
 		_update_status_labels()
-		_set_result_text("Another tie! Bet again.", RESULT_NEUTRAL)
+		if tie_count_before >= 2:
+			var jackpot_outcome: Dictionary = game_state.resolve_triple_tie()
+			_update_high_score()
+			_update_status_labels()
+			_play_success_sound()
+			_set_result_text("TRIPLE TIE! JACKPOT! +15 points!", RESULT_WIN)
+			_emit_streak_particles()
+			await get_tree().create_timer(1.5).timeout
+			if await _handle_level_outcome(jackpot_outcome):
+				return
+			_deal_new_card_after_tie()
+			return
+
+		if await _handle_level_outcome(tie_outcome):
+			return
+
+		var tie_label: String = "DOUBLE TIE! Bet again." if game_state.consecutive_ties >= 2 else "Another tie! Bet again."
+		_set_result_text(tie_label, RESULT_WIN if game_state.consecutive_ties >= 2 else RESULT_NEUTRAL)
 		_reset_choice_slots()
 		input_locked = false
 		_set_guess_buttons_enabled(true)
@@ -781,7 +818,7 @@ func _resolve_tie_bet(player_said_higher: bool, bet_card_value: int, _next_card:
 		_update_status_labels()
 		_play_success_sound()
 		var bonus: int = int(outcome.get("awarded_points", 2))
-		_set_result_text("Correct bet! +%d bonus points. Streak reset." % bonus, RESULT_SUCCESS)
+		_set_result_text("Correct bet! +%d bonus points." % bonus, RESULT_SUCCESS)
 		_emit_streak_particles()
 		if await _handle_level_outcome(outcome):
 			return
@@ -951,6 +988,41 @@ func _animate_card_reveal(card: Dictionary) -> void:
 func _animate_streak() -> void:
 	run_hud.animate_streak(self)
 
+func _play_dramatic_fail(previous_streak: int, comparison_text: String, reshuffled_after_reveal: bool) -> bool:
+	if previous_streak < DRAMATIC_FAIL_THRESHOLD:
+		return false
+
+	var is_big_collapse: bool = previous_streak >= HIGH_STREAK_THRESHOLD
+	_play_collapse_sound(is_big_collapse)
+	subtitle_label.text = "The run buckled under pressure." if is_big_collapse else "That streak had real momentum."
+	card_panel.pivot_offset = card_panel.size / 2.0
+	card_panel.scale = Vector2.ONE
+	card_panel.rotation = 0.0
+
+	var freeze_time: float = 0.28 if is_big_collapse else 0.18
+	await get_tree().create_timer(freeze_time).timeout
+
+	var zoom_tween: Tween = create_tween()
+	zoom_tween.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	zoom_tween.set_parallel(true)
+	zoom_tween.tween_property(card_panel, "scale", Vector2(1.16, 1.16) if is_big_collapse else Vector2(1.1, 1.1), 0.16)
+	zoom_tween.tween_property(card_panel, "rotation", -0.05 if is_big_collapse else -0.03, 0.16)
+	await zoom_tween.finished
+
+	_shake_screen(1.45 if is_big_collapse else 1.15)
+	var fail_text: String = "Catastrophe! %s streak lost on %s." % [previous_streak, comparison_text] if is_big_collapse else "So close. %s streak lost on %s." % [previous_streak, comparison_text]
+	if reshuffled_after_reveal:
+		fail_text += " Fresh deck shuffled."
+	_set_result_text(fail_text, RESULT_FAIL)
+
+	var settle_tween: Tween = create_tween()
+	settle_tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	settle_tween.set_parallel(true)
+	settle_tween.tween_property(card_panel, "scale", Vector2.ONE, 0.18)
+	settle_tween.tween_property(card_panel, "rotation", 0.0, 0.18)
+	await settle_tween.finished
+	return true
+
 func _finish_run(message: String, won: bool) -> void:
 	_dismiss_incoming_overlay()
 	round_active = false
@@ -1017,7 +1089,7 @@ func _on_level_continue_pressed() -> void:
 	subtitle_label.text = "Build enough correct guesses before the level runs out of draws."
 	_start_level(pending_level_intro_message)
 
-func _shake_screen() -> void:
+func _shake_screen(multiplier: float = 1.0) -> void:
 	if shake_tween != null:
 		shake_tween.kill()
 
@@ -1033,7 +1105,7 @@ func _shake_screen() -> void:
 	]
 
 	for offset in shake_offsets:
-		shake_tween.tween_property(self, "position", offset * SCREEN_SHAKE_STRENGTH, SCREEN_SHAKE_STEP)
+		shake_tween.tween_property(self, "position", offset * SCREEN_SHAKE_STRENGTH * multiplier, SCREEN_SHAKE_STEP)
 
 	shake_tween.tween_property(self, "position", Vector2.ZERO, 0.04)
 
@@ -1075,6 +1147,12 @@ func _play_fail_sound() -> void:
 	_play_tone_sequence(fail_sfx_player, [
 		{"from": 420.0, "to": 280.0, "duration": 0.10, "volume": 0.15},
 		{"from": 250.0, "to": 130.0, "duration": 0.16, "volume": 0.13},
+	])
+
+func _play_collapse_sound(is_big_collapse: bool) -> void:
+	_play_tone_sequence(fail_sfx_player, [
+		{"from": 180.0 if is_big_collapse else 240.0, "to": 110.0 if is_big_collapse else 150.0, "duration": 0.18, "volume": 0.16},
+		{"from": 120.0 if is_big_collapse else 150.0, "to": 70.0 if is_big_collapse else 95.0, "duration": 0.22, "volume": 0.14},
 	])
 
 func _play_tone_sequence(player: AudioStreamPlayer, segments: Array) -> void:

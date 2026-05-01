@@ -1,6 +1,9 @@
 class_name CardView
 extends RefCounted
 
+const MEDIUM_STREAK_THRESHOLD := 5
+const HIGH_STREAK_THRESHOLD := 10
+
 var panel: PanelContainer
 var rank_label: Label
 var suit_center: Label
@@ -8,6 +11,7 @@ var corner_rank_top: Label
 var corner_suit_top: Label
 var corner_rank_bottom: Label
 var corner_suit_bottom: Label
+var base_panel_style: StyleBoxFlat
 
 func setup(
 	card_panel: PanelContainer,
@@ -25,6 +29,7 @@ func setup(
 	corner_suit_top = top_suit
 	corner_rank_bottom = bottom_rank
 	corner_suit_bottom = bottom_suit
+	base_panel_style = _get_panel_style()
 
 func apply_card(card: Dictionary) -> void:
 	var rank_text: String = Deck.rank_text(card)
@@ -64,6 +69,22 @@ func apply_empty() -> void:
 
 func refresh_pivot() -> void:
 	panel.pivot_offset = panel.size / 2.0
+
+func apply_streak_momentum(streak: int) -> void:
+	var style: StyleBoxFlat = base_panel_style.duplicate() as StyleBoxFlat
+	if style == null:
+		return
+
+	if streak >= HIGH_STREAK_THRESHOLD:
+		style.border_color = Color("ffd166")
+		style.shadow_color = Color(1.0, 0.721569, 0.270588, 0.42)
+		style.shadow_size = 24
+	elif streak >= MEDIUM_STREAK_THRESHOLD:
+		style.border_color = Color(0.992157, 0.823529, 0.388235, 0.38)
+		style.shadow_color = Color(1.0, 0.878431, 0.537255, 0.26)
+		style.shadow_size = 18
+
+	panel.add_theme_stylebox_override("panel", style)
 
 func animate_reveal(owner: Control, card: Dictionary, play_sound: Callable) -> void:
 	refresh_pivot()
@@ -125,3 +146,9 @@ func _apply_text_color(color: Color) -> void:
 	corner_suit_top.add_theme_color_override("font_color", color)
 	corner_rank_bottom.add_theme_color_override("font_color", color)
 	corner_suit_bottom.add_theme_color_override("font_color", color)
+
+func _get_panel_style() -> StyleBoxFlat:
+	var style: StyleBoxFlat = panel.get_theme_stylebox("panel").duplicate() as StyleBoxFlat
+	if style == null:
+		style = StyleBoxFlat.new()
+	return style

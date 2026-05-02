@@ -12,6 +12,7 @@ const SFX_BUFFER_LENGTH := 0.6
 const MEDIUM_STREAK_THRESHOLD := 5
 const HIGH_STREAK_THRESHOLD := 10
 const DRAMATIC_FAIL_THRESHOLD := 5
+const NEAR_MISS_DISTANCE := 1
 const CardViewScript := preload("res://scripts/card_view.gd")
 const DeckViewScript := preload("res://scripts/deck_view.gd")
 const RunHudScript := preload("res://scripts/run_hud.gd")
@@ -40,6 +41,7 @@ var success_sfx_player: AudioStreamPlayer
 var fail_sfx_player: AudioStreamPlayer
 var effects_layer: Control
 var incoming_overlay: Control = null
+var feedback_panel_node: PanelContainer
 var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 var card_view
 var deck_view
@@ -210,19 +212,44 @@ func _restructure_layout() -> void:
 	var game_margin: MarginContainer = $GameMargin
 	var old_vbox: VBoxContainer = $GameMargin/GameVBox
 
+	var page_vbox := VBoxContainer.new()
+	page_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	page_vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	page_vbox.add_theme_constant_override("separation", 14)
+	page_vbox.alignment = BoxContainer.ALIGNMENT_END
+	game_margin.add_child(page_vbox)
+
 	var main_hbox := HBoxContainer.new()
 	main_hbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	main_hbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	main_hbox.add_theme_constant_override("separation", 24)
-	game_margin.add_child(main_hbox)
+	main_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	page_vbox.add_child(main_hbox)
 
-	# LEFT: carta mare + streak bar vertical (HBox)
+	# LEFT: played card, streak bar, and local feedback.
+	var card_stack := VBoxContainer.new()
+	card_stack.custom_minimum_size = Vector2(246, 0)
+	card_stack.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	card_stack.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	card_stack.add_theme_constant_override("separation", 10)
+	card_stack.alignment = BoxContainer.ALIGNMENT_CENTER
+	main_hbox.add_child(card_stack)
+
 	var left_col := HBoxContainer.new()
-	left_col.custom_minimum_size = Vector2(228, 0)
+	left_col.custom_minimum_size = Vector2(246, 0)
 	left_col.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	left_col.add_theme_constant_override("separation", 8)
+	left_col.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	left_col.add_theme_constant_override("separation", 12)
 	left_col.alignment = BoxContainer.ALIGNMENT_CENTER
-	main_hbox.add_child(left_col)
+	var card_stack_top_spacer := Control.new()
+	card_stack_top_spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	card_stack.add_child(card_stack_top_spacer)
+
+	card_stack.add_child(left_col)
+
+	var card_stack_spacer := Control.new()
+	card_stack_spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	card_stack.add_child(card_stack_spacer)
 
 	# DECK: imediat lângă carte (VBox)
 	var deck_section := VBoxContainer.new()
@@ -233,9 +260,9 @@ func _restructure_layout() -> void:
 
 	# CENTRU: statistici + info (VBox, expandat)
 	var center_col := VBoxContainer.new()
-	center_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	center_col.custom_minimum_size = Vector2(318, 0)
+	center_col.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	center_col.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	center_col.size_flags_stretch_ratio = 0.75
 	center_col.add_theme_constant_override("separation", 12)
 	center_col.alignment = BoxContainer.ALIGNMENT_CENTER
 	main_hbox.add_child(center_col)
@@ -258,13 +285,49 @@ func _restructure_layout() -> void:
 	# Nod title direct din scenă
 	var title_node: Label = $GameMargin/GameVBox/Title
 
+	var feedback_panel := PanelContainer.new()
+	feedback_panel.custom_minimum_size = Vector2(246, 88)
+	feedback_panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	var feedback_style := StyleBoxFlat.new()
+	feedback_style.bg_color = Color(0.035, 0.045, 0.055, 0.76)
+	feedback_style.border_color = Color(1.0, 0.878431, 0.537255, 0.2)
+	feedback_style.border_width_top = 1
+	feedback_style.border_width_right = 1
+	feedback_style.border_width_bottom = 1
+	feedback_style.border_width_left = 1
+	feedback_style.corner_radius_top_left = 8
+	feedback_style.corner_radius_top_right = 8
+	feedback_style.corner_radius_bottom_right = 8
+	feedback_style.corner_radius_bottom_left = 8
+	feedback_panel.add_theme_stylebox_override("panel", feedback_style)
+	feedback_panel_node = feedback_panel
+	card_stack.add_child(feedback_panel)
+
+	var feedback_margin := MarginContainer.new()
+	feedback_margin.add_theme_constant_override("margin_left", 12)
+	feedback_margin.add_theme_constant_override("margin_top", 10)
+	feedback_margin.add_theme_constant_override("margin_right", 12)
+	feedback_margin.add_theme_constant_override("margin_bottom", 10)
+	feedback_panel.add_child(feedback_margin)
+
+	var feedback_col := VBoxContainer.new()
+	feedback_col.add_theme_constant_override("separation", 4)
+	feedback_col.alignment = BoxContainer.ALIGNMENT_CENTER
+	feedback_margin.add_child(feedback_col)
+
 	# Reparentăm nodurile în ordinea dorită în centru
 	title_node.reparent(center_col)
 	title_node.size_flags_horizontal = Control.SIZE_FILL
-	subtitle_label.reparent(center_col)
-	subtitle_label.size_flags_horizontal = Control.SIZE_FILL
-	result_label.reparent(center_col)
+	result_label.reparent(feedback_col)
 	result_label.size_flags_horizontal = Control.SIZE_FILL
+	result_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	result_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	result_label.add_theme_font_size_override("font_size", 16)
+	subtitle_label.reparent(feedback_col)
+	subtitle_label.size_flags_horizontal = Control.SIZE_FILL
+	subtitle_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	subtitle_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	subtitle_label.add_theme_font_size_override("font_size", 13)
 	play_again_button.reparent(center_col)
 	$GameMargin/GameVBox/TopBar.reparent(center_col)
 	bonus_banner.reparent(center_col)
@@ -279,7 +342,7 @@ func _restructure_layout() -> void:
 	deck_section.add_child(deck_row)
 
 	var buttons_col := VBoxContainer.new()
-	buttons_col.custom_minimum_size = Vector2(120, 0)
+	buttons_col.custom_minimum_size = Vector2(104, 0)
 	buttons_col.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	buttons_col.add_theme_constant_override("separation", 8)
 	buttons_col.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -730,10 +793,16 @@ func _on_deck_card_pressed(pressed_button: Button) -> void:
 		_set_guess_buttons_enabled(true)
 	else:
 		var previous_streak: int = 0 if game_state == null else game_state.current_streak
-		var wrong_outcome: Dictionary = game_state.resolve_wrong_guess()
+		var is_near_miss: bool = _is_near_miss(previous_value, next_value)
+		var wrong_outcome: Dictionary = game_state.resolve_near_miss_guess() if is_near_miss else game_state.resolve_wrong_guess()
 		_update_status_labels()
-		var had_dramatic_fail: bool = await _play_dramatic_fail(previous_streak, comparison_text, reshuffled_after_reveal)
-		if not had_dramatic_fail:
+		var had_near_miss: bool = false
+		var had_dramatic_fail: bool = false
+		if is_near_miss:
+			had_near_miss = await _play_near_miss(previous_value, next_value, comparison_text, reshuffled_after_reveal)
+		else:
+			had_dramatic_fail = await _play_dramatic_fail(previous_streak, comparison_text, reshuffled_after_reveal)
+		if not had_dramatic_fail and not had_near_miss:
 			var fail_text: String = "Wrong! %s" % comparison_text
 			if reshuffled_after_reveal:
 				fail_text += " Fresh deck shuffled."
@@ -823,10 +892,19 @@ func _resolve_tie_bet(player_said_higher: bool, bet_card_value: int, _next_card:
 		if await _handle_level_outcome(outcome):
 			return
 	else:
-		var outcome: Dictionary = game_state.resolve_tie_bet_wrong()
+		var is_near_miss: bool = _is_near_miss(bet_card_value, next_value)
+		var outcome: Dictionary = game_state.resolve_near_miss_tie_bet_wrong() if is_near_miss else game_state.resolve_tie_bet_wrong()
 		_update_status_labels()
-		_play_fail_sound()
-		_set_result_text("Wrong bet! Streak reset and -1 draw.", RESULT_FAIL)
+		var tie_bet_comparison: String = "It was %s, not %s." % [
+			"higher" if next_value > bet_card_value else "lower",
+			"higher" if player_said_higher else "lower",
+		]
+		var had_near_miss: bool = false
+		if is_near_miss:
+			had_near_miss = await _play_near_miss(bet_card_value, next_value, tie_bet_comparison, false)
+		if not had_near_miss:
+			_play_fail_sound()
+			_set_result_text("Wrong bet! Streak reset and -1 draw.", RESULT_FAIL)
 		if await _handle_level_outcome(outcome):
 			return
 
@@ -932,20 +1010,27 @@ func _animate_card_fly(from_button: Button, guess_higher: bool) -> Control:
 		fly_label.add_theme_color_override("font_color", Deck.suit_color(peeked_card))
 	overlay.add_child(fly_label)
 
-	# Rect sursă și destinație (deasupra sau dedesubt față de card_panel, mai mică)
+	# Rect sursă și destinație: current card stays centered, played card lands above or below it.
 	var from_rect: Rect2 = from_button.get_global_rect()
 	var card_rect: Rect2 = card_panel.get_global_rect()
+	var card_stack_rect: Rect2 = card_panel.get_parent().get_parent().get_global_rect()
+	var feedback_rect: Rect2 = feedback_panel_node.get_global_rect() if feedback_panel_node != null else Rect2()
 	var viewport_h: float = get_viewport().get_visible_rect().size.y
 	var land_scale := 0.6
 	var land_size := card_rect.size * land_scale
-	var land_x := card_rect.position.x + (card_rect.size.x - land_size.x) * 0.5
-	var gap := 6.0
+	var gap := 10.0
+	var dest_x := card_rect.position.x + (card_rect.size.x - land_size.x) * 0.5
+	var available_top: float = card_stack_rect.position.y
+	var available_bottom: float = card_stack_rect.end.y
+	if feedback_panel_node != null:
+		available_bottom = feedback_rect.position.y - gap
 	var dest_y: float
 	if guess_higher:
-		dest_y = maxf(0.0, card_rect.position.y - land_size.y - gap)
+		dest_y = maxf(available_top, card_rect.position.y - land_size.y - gap)
 	else:
-		dest_y = minf(viewport_h - land_size.y, card_rect.position.y + card_rect.size.y + gap)
-	var to_rect := Rect2(land_x, dest_y, land_size.x, land_size.y)
+		dest_y = minf(available_bottom - land_size.y, card_rect.position.y + card_rect.size.y + gap)
+	dest_y = clampf(dest_y, 0.0, viewport_h - land_size.y)
+	var to_rect := Rect2(dest_x, dest_y, land_size.x, land_size.y)
 
 	fly_bg.position = from_rect.position
 	fly_bg.size = from_rect.size
@@ -987,6 +1072,192 @@ func _animate_card_reveal(card: Dictionary) -> void:
 
 func _animate_streak() -> void:
 	run_hud.animate_streak(self)
+
+func _is_near_miss(previous_value: int, next_value: int) -> bool:
+	return absi(previous_value - next_value) == NEAR_MISS_DISTANCE
+
+func _play_near_miss(previous_value: int, next_value: int, comparison_text: String, reshuffled_after_reveal: bool) -> bool:
+	if not _is_near_miss(previous_value, next_value):
+		return false
+
+	_play_near_miss_sound()
+	subtitle_label.text = "Near miss. One rank away, and your streak is preserved."
+	card_panel.pivot_offset = card_panel.size / 2.0
+	card_panel.scale = Vector2.ONE
+	card_panel.rotation = 0.0
+
+	await get_tree().create_timer(0.12).timeout
+
+	var near_miss_overlay: Control = _create_near_miss_overlay(previous_value, next_value)
+
+	var slow_tween: Tween = create_tween()
+	slow_tween.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	slow_tween.set_parallel(true)
+	slow_tween.tween_property(card_panel, "scale", Vector2(1.18, 1.18), 0.18)
+	slow_tween.tween_property(card_panel, "rotation", 0.055, 0.18)
+	if near_miss_overlay != null:
+		slow_tween.tween_property(near_miss_overlay, "modulate:a", 1.0, 0.12)
+	await slow_tween.finished
+
+	var near_miss_text: String = "NEAR MISS! %s Streak preserved." % comparison_text
+	if reshuffled_after_reveal:
+		near_miss_text += " Fresh deck shuffled."
+	_set_result_text(near_miss_text, RESULT_WIN)
+	_shake_screen(0.65)
+	_emit_near_miss_particles()
+	await get_tree().create_timer(0.85).timeout
+
+	var settle_tween: Tween = create_tween()
+	settle_tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	settle_tween.set_parallel(true)
+	settle_tween.tween_property(card_panel, "scale", Vector2.ONE, 0.14)
+	settle_tween.tween_property(card_panel, "rotation", 0.0, 0.14)
+	if near_miss_overlay != null:
+		settle_tween.tween_property(near_miss_overlay, "modulate:a", 0.0, 0.14)
+	await settle_tween.finished
+	if near_miss_overlay != null and is_instance_valid(near_miss_overlay):
+		near_miss_overlay.queue_free()
+	return true
+
+func _create_near_miss_overlay(previous_value: int, next_value: int) -> Control:
+	if effects_layer == null:
+		return null
+
+	var overlay := Control.new()
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.modulate.a = 0.0
+	effects_layer.add_child(overlay)
+
+	var veil := ColorRect.new()
+	veil.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	veil.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	veil.color = Color(0.04, 0.03, 0.02, 0.34)
+	overlay.add_child(veil)
+
+	var card_rect: Rect2 = card_panel.get_global_rect()
+	var origin_offset: Vector2 = effects_layer.get_global_rect().position
+	var center: Vector2 = card_rect.get_center() - origin_offset
+	var layer_size: Vector2 = effects_layer.size
+
+	var banner := PanelContainer.new()
+	banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var banner_width: float = minf(380.0, maxf(260.0, layer_size.x - 24.0))
+	banner.position = Vector2(clampf(center.x - banner_width / 2.0, 12.0, maxf(12.0, layer_size.x - banner_width - 12.0)), maxf(18.0, center.y - 178.0))
+	banner.size = Vector2(banner_width, 92.0)
+	var banner_style := StyleBoxFlat.new()
+	banner_style.bg_color = Color(0.07, 0.065, 0.05, 0.92)
+	banner_style.border_color = Color("ffe08a")
+	banner_style.border_width_top = 2
+	banner_style.border_width_right = 2
+	banner_style.border_width_bottom = 2
+	banner_style.border_width_left = 2
+	banner_style.corner_radius_top_left = 8
+	banner_style.corner_radius_top_right = 8
+	banner_style.corner_radius_bottom_right = 8
+	banner_style.corner_radius_bottom_left = 8
+	banner_style.shadow_color = Color(1.0, 0.78, 0.25, 0.38)
+	banner_style.shadow_size = 22
+	banner.add_theme_stylebox_override("panel", banner_style)
+	overlay.add_child(banner)
+
+	var title := Label.new()
+	title.text = "SO CLOSE..."
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 30)
+	title.add_theme_color_override("font_color", Color("ffe08a"))
+	banner.add_child(title)
+
+	_add_near_miss_rank_ghost(overlay, _rank_text_from_value(previous_value), center + Vector2(-150.0, 4.0), Color(0.55, 0.82, 1.0, 0.72))
+	_add_near_miss_rank_ghost(overlay, _rank_text_from_value(next_value), center + Vector2(92.0, 4.0), Color(1.0, 0.62, 0.47, 0.78))
+
+	var marker := Label.new()
+	marker.text = "1"
+	marker.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	marker.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	marker.position = center + Vector2(-28.0, 23.0)
+	marker.size = Vector2(56.0, 48.0)
+	marker.add_theme_font_size_override("font_size", 36)
+	marker.add_theme_color_override("font_color", Color("f8f9fa"))
+	overlay.add_child(marker)
+
+	var pop_tween: Tween = create_tween()
+	pop_tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	pop_tween.set_parallel(true)
+	banner.pivot_offset = banner.size / 2.0
+	banner.scale = Vector2(0.86, 0.86)
+	pop_tween.tween_property(banner, "scale", Vector2.ONE, 0.24)
+	pop_tween.tween_property(marker, "scale", Vector2(1.2, 1.2), 0.18)
+	pop_tween.chain().tween_property(marker, "scale", Vector2.ONE, 0.12)
+
+	return overlay
+
+func _add_near_miss_rank_ghost(parent: Control, text: String, position_value: Vector2, color: Color) -> void:
+	var ghost := Label.new()
+	ghost.text = text
+	ghost.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	ghost.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	ghost.position = position_value
+	ghost.size = Vector2(58.0, 70.0)
+	ghost.modulate = color
+	ghost.add_theme_font_size_override("font_size", 54)
+	parent.add_child(ghost)
+
+	var drift: Tween = create_tween()
+	drift.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	drift.set_parallel(true)
+	drift.tween_property(ghost, "position:y", ghost.position.y - 12.0, 0.46)
+	drift.tween_property(ghost, "modulate:a", 0.18, 0.46)
+
+func _emit_near_miss_particles() -> void:
+	if effects_layer == null:
+		return
+
+	var origin: Vector2 = card_panel.get_global_rect().get_center() - effects_layer.get_global_rect().position
+	var palette: Array[Color] = [
+		Color("ffe08a"),
+		Color("ff9f7a"),
+		Color("90e0ef"),
+		Color("f8f9fa"),
+	]
+
+	for i in range(22):
+		var particle := ColorRect.new()
+		var size_value: float = rng.randf_range(3.0, 7.0)
+		particle.color = palette[rng.randi_range(0, palette.size() - 1)]
+		particle.custom_minimum_size = Vector2(size_value, size_value)
+		particle.size = Vector2(size_value, size_value)
+		particle.position = origin - particle.size / 2.0
+		particle.pivot_offset = particle.size / 2.0
+		particle.rotation = rng.randf_range(0.0, TAU)
+		particle.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		effects_layer.add_child(particle)
+
+		var angle: float = rng.randf_range(0.0, TAU)
+		var distance: float = rng.randf_range(58.0, 145.0)
+		var target_position: Vector2 = particle.position + Vector2(cos(angle), sin(angle)) * distance
+		var duration: float = rng.randf_range(0.34, 0.62)
+		var tween: Tween = create_tween()
+		tween.set_parallel(true)
+		tween.tween_property(particle, "position", target_position, duration)
+		tween.tween_property(particle, "rotation", particle.rotation + rng.randf_range(-4.0, 4.0), duration)
+		tween.tween_property(particle, "scale", Vector2.ONE * rng.randf_range(0.25, 0.55), duration)
+		tween.tween_property(particle, "modulate:a", 0.0, duration)
+		tween.chain().tween_callback(particle.queue_free)
+
+func _rank_text_from_value(value: int) -> String:
+	match value:
+		11:
+			return "J"
+		12:
+			return "Q"
+		13:
+			return "K"
+		14:
+			return "A"
+		_:
+			return str(value)
 
 func _play_dramatic_fail(previous_streak: int, comparison_text: String, reshuffled_after_reveal: bool) -> bool:
 	if previous_streak < DRAMATIC_FAIL_THRESHOLD:
@@ -1154,6 +1425,48 @@ func _play_collapse_sound(is_big_collapse: bool) -> void:
 		{"from": 180.0 if is_big_collapse else 240.0, "to": 110.0 if is_big_collapse else 150.0, "duration": 0.18, "volume": 0.16},
 		{"from": 120.0 if is_big_collapse else 150.0, "to": 70.0 if is_big_collapse else 95.0, "duration": 0.22, "volume": 0.14},
 	])
+
+func _play_near_miss_sound() -> void:
+	if fail_sfx_player == null or is_muted:
+		return
+	fail_sfx_player.stop()
+	fail_sfx_player.play()
+	var playback: AudioStreamGeneratorPlayback = fail_sfx_player.get_stream_playback() as AudioStreamGeneratorPlayback
+	if playback == null:
+		return
+
+	_push_crowd_groan_segment(playback, 0.82, 0.12)
+
+func _push_crowd_groan_segment(playback: AudioStreamGeneratorPlayback, duration: float, volume: float) -> void:
+	var frame_count: int = maxi(int(SFX_SAMPLE_RATE * duration), 1)
+	var start_frequencies: Array[float] = [255.0, 274.0, 292.0, 315.0, 338.0, 362.0, 386.0]
+	var end_frequencies: Array[float] = [152.0, 164.0, 176.0, 190.0, 204.0, 218.0, 232.0]
+	var phases: Array[float] = []
+
+	for _i in range(start_frequencies.size()):
+		phases.append(rng.randf_range(0.0, TAU))
+
+	for frame_index in range(frame_count):
+		var progress: float = float(frame_index) / float(maxi(frame_count - 1, 1))
+		var pitch_progress: float = 1.0 - pow(1.0 - progress, 2.4)
+		var attack: float = smoothstep(0.0, 0.12, progress)
+		var release: float = 1.0 - smoothstep(0.58, 1.0, progress)
+		var envelope: float = attack * release
+		var sample: float = 0.0
+
+		for voice_index in range(start_frequencies.size()):
+			var wobble: float = sin(progress * TAU * (1.1 + float(voice_index) * 0.17)) * 4.0
+			var frequency: float = lerpf(start_frequencies[voice_index], end_frequencies[voice_index], pitch_progress) + wobble
+			phases[voice_index] += TAU * frequency / SFX_SAMPLE_RATE
+			var voice: float = sin(phases[voice_index]) * 0.74
+			voice += sin(phases[voice_index] * 2.0) * 0.18
+			voice += sin(phases[voice_index] * 0.5) * 0.08
+			sample += voice
+
+		sample = sample / float(start_frequencies.size())
+		var breath: float = rng.randf_range(-0.035, 0.035) * (1.0 - progress)
+		var final_sample: float = (sample + breath) * envelope * volume
+		playback.push_frame(Vector2(final_sample, final_sample))
 
 func _play_tone_sequence(player: AudioStreamPlayer, segments: Array) -> void:
 	if player == null or is_muted:

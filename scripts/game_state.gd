@@ -175,6 +175,12 @@ func resolve_wrong_guess() -> Dictionary:
 	precision_chain = 0
 	return _evaluate_attempt(false, 0)
 
+func resolve_near_miss_guess() -> Dictionary:
+	draws_used += 1
+	precision_chain = 0
+	consecutive_ties = 0
+	return _evaluate_attempt(false, 0)
+
 func resolve_tie() -> Dictionary:
 	draws_used += 1
 	consecutive_ties += 1
@@ -190,6 +196,12 @@ func resolve_tie_bet_correct() -> Dictionary:
 
 func resolve_tie_bet_wrong() -> Dictionary:
 	current_streak = 0
+	precision_chain = 0
+	consecutive_ties = 0
+	draws_used += 1
+	return _evaluate_attempt(true, 0)
+
+func resolve_near_miss_tie_bet_wrong() -> Dictionary:
 	precision_chain = 0
 	consecutive_ties = 0
 	draws_used += 1

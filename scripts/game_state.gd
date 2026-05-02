@@ -7,6 +7,8 @@ const MODIFIER_NONE := ""
 const MODIFIER_ROYAL_BONUS := "royal_bonus"
 const MODIFIER_BLACKOUT := "blackout"
 const MODIFIER_PRECISION := "precision"
+const COMBO_MONOCHROME := "Monochrome"
+const COMBO_MONOCHROME_BONUS := 1
 const REWARD_NONE := ""
 const REWARD_LIFE := "life"
 const REWARD_DRAWS := "draws"
@@ -34,6 +36,8 @@ var draws_used: int = 0
 var current_streak: int = 0
 var precision_chain: int = 0
 var consecutive_ties: int = 0
+var monochrome_chain_color: String = ""
+var monochrome_chain_count: int = 0
 var active_bonus_draws: int = 0
 var reward_choice_pending: bool = false
 
@@ -157,15 +161,21 @@ func resolve_correct_guess(revealed_card: Dictionary) -> Dictionary:
 	var streak_points: int = get_streak_multiplier()
 	var modifier_result: Dictionary = _get_correct_guess_modifier_result(revealed_card, streak_points)
 	var modifier_bonus: int = int(modifier_result.get("modifier_bonus", 0))
-	var awarded_points: int = int(modifier_result.get("awarded_points", streak_points))
+	var modifier_blocked: bool = bool(modifier_result.get("modifier_blocked", false))
+	var combo_result: Dictionary = _get_monochrome_combo_result(revealed_card, !modifier_blocked)
+	var combo_bonus: int = int(combo_result.get("combo_bonus", 0))
+	var awarded_points: int = int(modifier_result.get("awarded_points", streak_points)) + combo_bonus
 	level_score += awarded_points
 	run_score += awarded_points
 	var result: Dictionary = _evaluate_attempt(false, awarded_points)
 	result["streak_points"] = streak_points
 	result["modifier_bonus"] = modifier_bonus
 	result["modifier_name"] = get_level_modifier_label()
-	result["modifier_blocked"] = bool(modifier_result.get("modifier_blocked", false))
+	result["modifier_blocked"] = modifier_blocked
 	result["modifier_effect_text"] = String(modifier_result.get("modifier_effect_text", ""))
+	result["combo_bonus"] = combo_bonus
+	result["combo_name"] = String(combo_result.get("combo_name", ""))
+	result["combo_effect_text"] = String(combo_result.get("combo_effect_text", ""))
 	result["precision_chain"] = precision_chain
 	return result
 
@@ -173,38 +183,62 @@ func resolve_wrong_guess() -> Dictionary:
 	draws_used += 1
 	current_streak = 0
 	precision_chain = 0
+	_reset_combo_state()
 	return _evaluate_attempt(false, 0)
 
 func resolve_near_miss_guess() -> Dictionary:
 	draws_used += 1
 	precision_chain = 0
 	consecutive_ties = 0
+	_reset_combo_state()
 	return _evaluate_attempt(false, 0)
 
 func resolve_tie() -> Dictionary:
 	draws_used += 1
 	consecutive_ties += 1
+	_reset_combo_state()
 	return _evaluate_attempt(true, 0)
 
-func resolve_tie_bet_correct() -> Dictionary:
+func resolve_tie_bet_correct(revealed_card: Dictionary = {}) -> Dictionary:
 	var multiplier: int = get_streak_multiplier()
 	var bonus: int = multiplier * 2
-	run_score += bonus
-	level_score += bonus
+	var awarded_points: int = bonus
+	var modifier_blocked: bool = false
+	var modifier_effect_text: String = ""
+	if get_level_modifier() == MODIFIER_BLACKOUT:
+		var suit: String = String(revealed_card.get("suit", ""))
+		if suit == "hearts" or suit == "diamonds":
+			awarded_points = 0
+			modifier_blocked = true
+			modifier_effect_text = "Blackout blocked the tie bonus on a red card"
+	var combo_result: Dictionary = _get_monochrome_combo_result(revealed_card, !modifier_blocked)
+	var combo_bonus: int = int(combo_result.get("combo_bonus", 0))
+	awarded_points += combo_bonus
+	run_score += awarded_points
+	level_score += awarded_points
 	consecutive_ties = 0
-	return _evaluate_attempt(true, bonus)
+	var result: Dictionary = _evaluate_attempt(true, awarded_points)
+	result["modifier_name"] = get_level_modifier_label()
+	result["modifier_blocked"] = modifier_blocked
+	result["modifier_effect_text"] = modifier_effect_text
+	result["combo_bonus"] = combo_bonus
+	result["combo_name"] = String(combo_result.get("combo_name", ""))
+	result["combo_effect_text"] = String(combo_result.get("combo_effect_text", ""))
+	return result
 
 func resolve_tie_bet_wrong() -> Dictionary:
 	current_streak = 0
 	precision_chain = 0
 	consecutive_ties = 0
 	draws_used += 1
+	_reset_combo_state()
 	return _evaluate_attempt(true, 0)
 
 func resolve_near_miss_tie_bet_wrong() -> Dictionary:
 	precision_chain = 0
 	consecutive_ties = 0
 	draws_used += 1
+	_reset_combo_state()
 	return _evaluate_attempt(true, 0)
 
 func resolve_triple_tie() -> Dictionary:
@@ -298,8 +332,50 @@ func _get_correct_guess_modifier_result(revealed_card: Dictionary, streak_points
 			pass
 	return result
 
+func _get_monochrome_combo_result(revealed_card: Dictionary, can_progress: bool) -> Dictionary:
+	var result: Dictionary = {
+		"combo_bonus": 0,
+		"combo_name": "",
+		"combo_effect_text": "",
+	}
+	if not can_progress:
+		_reset_combo_state()
+		return result
+
+	var card_color: String = _card_color_key(revealed_card)
+	if card_color.is_empty():
+		_reset_combo_state()
+		return result
+
+	if monochrome_chain_color == card_color:
+		monochrome_chain_count += 1
+	else:
+		monochrome_chain_color = card_color
+		monochrome_chain_count = 1
+
+	if monochrome_chain_count >= 3:
+		result["combo_bonus"] = COMBO_MONOCHROME_BONUS
+		result["combo_name"] = COMBO_MONOCHROME
+		result["combo_effect_text"] = "%s combo! +%d points" % [COMBO_MONOCHROME, COMBO_MONOCHROME_BONUS]
+		_reset_combo_state()
+
+	return result
+
+func _card_color_key(card: Dictionary) -> String:
+	var suit: String = String(card.get("suit", ""))
+	if suit == "hearts" or suit == "diamonds":
+		return "red"
+	if suit == "clubs" or suit == "spades":
+		return "black"
+	return ""
+
+func _reset_combo_state() -> void:
+	monochrome_chain_color = ""
+	monochrome_chain_count = 0
+
 func _reset_level_progress() -> void:
 	level_score = 0
 	draws_used = 0
 	precision_chain = 0
 	consecutive_ties = 0
+	_reset_combo_state()

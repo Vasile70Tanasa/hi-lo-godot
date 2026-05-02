@@ -59,13 +59,13 @@ func rebuild(
 	for index in range(slot_count):
 		if !visual_slots[index]:
 			var empty_slot: Control = Control.new()
-			empty_slot.custom_minimum_size = Vector2(34, 50)
+			empty_slot.custom_minimum_size = Vector2(58, 82)
 			empty_slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			grid.add_child(empty_slot)
 			continue
 
 		var deck_button: Button = Button.new()
-		deck_button.custom_minimum_size = Vector2(50, 70)
+		deck_button.custom_minimum_size = Vector2(58, 82)
 		deck_button.focus_mode = Control.FOCUS_NONE
 		if reveal_remaining_cards and deck != null and remaining_card_index < deck.cards.size():
 			var remaining_card: Dictionary = deck.cards[remaining_card_index]
@@ -108,7 +108,7 @@ func apply_card_back(deck_button: Button, awaiting_pick: bool, round_active: boo
 	deck_button.add_theme_color_override("font_hover_color", Color("fff7de"))
 	deck_button.add_theme_color_override("font_pressed_color", Color("f3edd1"))
 	deck_button.add_theme_color_override("font_disabled_color", Color(0.952941, 0.945098, 0.831373, 0.55))
-	deck_button.add_theme_font_size_override("font_size", 10)
+	deck_button.add_theme_font_size_override("font_size", 11)
 
 func apply_card_front(deck_button: Button, card: Dictionary) -> void:
 	var suit_color: Color = Deck.suit_color(card)
@@ -123,7 +123,7 @@ func apply_card_front(deck_button: Button, card: Dictionary) -> void:
 	deck_button.add_theme_color_override("font_hover_color", suit_color)
 	deck_button.add_theme_color_override("font_pressed_color", suit_color)
 	deck_button.add_theme_color_override("font_disabled_color", suit_color)
-	deck_button.add_theme_font_size_override("font_size", 11)
+	deck_button.add_theme_font_size_override("font_size", 12)
 
 func animate_card_flip(owner: Control, deck_button: Button, card: Dictionary, is_cancelled: Callable) -> bool:
 	if not is_instance_valid(deck_button) or bool(is_cancelled.call()):

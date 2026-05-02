@@ -41,6 +41,7 @@ var success_sfx_player: AudioStreamPlayer
 var fail_sfx_player: AudioStreamPlayer
 var effects_layer: Control
 var incoming_overlay: Control = null
+var monochrome_overlay: Control = null
 var feedback_panel_node: PanelContainer
 var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 var card_view
@@ -136,6 +137,7 @@ func _setup_views() -> void:
 
 func start_game() -> void:
 	deck_reveal_generation += 1
+	_dismiss_monochrome_combo(true)
 	game_state = GameState.new()
 	deck = null
 	current_card = {}
@@ -178,6 +180,7 @@ func _start_level(message: String) -> void:
 
 func _show_start_state() -> void:
 	deck_reveal_generation += 1
+	_dismiss_monochrome_combo(true)
 	start_overlay.visible = true
 	round_active = false
 	input_locked = false
@@ -255,17 +258,17 @@ func _restructure_layout() -> void:
 	var deck_section := VBoxContainer.new()
 	deck_section.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	deck_section.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	deck_section.add_theme_constant_override("separation", 8)
+	deck_section.add_theme_constant_override("separation", 10)
 	main_hbox.add_child(deck_section)
 
 	# CENTRU: statistici + info (VBox, expandat)
-	var center_col := VBoxContainer.new()
-	center_col.custom_minimum_size = Vector2(318, 0)
-	center_col.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	center_col.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	center_col.add_theme_constant_override("separation", 12)
-	center_col.alignment = BoxContainer.ALIGNMENT_CENTER
-	main_hbox.add_child(center_col)
+	var right_col := VBoxContainer.new()
+	right_col.custom_minimum_size = Vector2(320, 0)
+	right_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	right_col.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	right_col.add_theme_constant_override("separation", 10)
+	right_col.alignment = BoxContainer.ALIGNMENT_BEGIN
+	main_hbox.add_child(right_col)
 
 	# Mutăm carta în stânga, mărită dar fără să se extindă vertical
 	card_panel.reparent(left_col)
@@ -273,16 +276,18 @@ func _restructure_layout() -> void:
 	card_panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 
 	# Butoanele verticale, text pe litere
-	lower_button.text = "L\nO\nW\nE\nR"
-	higher_button.text = "H\nI\nG\nH\nE\nR"
+	lower_button.text = "Lower"
+	higher_button.text = "Higher"
 	back_button.text = "Back  [Esc]"
-	lower_button.custom_minimum_size = Vector2(44, 0)
-	higher_button.custom_minimum_size = Vector2(44, 0)
-	back_button.custom_minimum_size = Vector2(120, 40)
-	lower_button.add_theme_font_size_override("font_size", 13)
-	higher_button.add_theme_font_size_override("font_size", 13)
+	lower_button.custom_minimum_size = Vector2(94, 34)
+	higher_button.custom_minimum_size = Vector2(94, 34)
+	back_button.custom_minimum_size = Vector2(108, 34)
+	lower_button.add_theme_font_size_override("font_size", 15)
+	higher_button.add_theme_font_size_override("font_size", 15)
+	back_button.add_theme_font_size_override("font_size", 14)
 
 	# Nod title direct din scenă
+	var top_bar: GridContainer = $GameMargin/GameVBox/TopBar
 	var title_node: Label = $GameMargin/GameVBox/Title
 
 	var feedback_panel := PanelContainer.new()
@@ -316,8 +321,10 @@ func _restructure_layout() -> void:
 	feedback_margin.add_child(feedback_col)
 
 	# Reparentăm nodurile în ordinea dorită în centru
-	title_node.reparent(center_col)
+	title_node.reparent(right_col)
 	title_node.size_flags_horizontal = Control.SIZE_FILL
+	title_node.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	title_node.add_theme_font_size_override("font_size", 34)
 	result_label.reparent(feedback_col)
 	result_label.size_flags_horizontal = Control.SIZE_FILL
 	result_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -328,38 +335,60 @@ func _restructure_layout() -> void:
 	subtitle_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	subtitle_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	subtitle_label.add_theme_font_size_override("font_size", 13)
-	play_again_button.reparent(center_col)
-	$GameMargin/GameVBox/TopBar.reparent(center_col)
-	bonus_banner.reparent(center_col)
-	modifier_banner.reparent(center_col)
-	mute_button.reparent(center_col)
+	score_label.reparent(right_col)
+	score_label.size_flags_horizontal = Control.SIZE_FILL
+	score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+
+	high_score_label.reparent(right_col)
+	high_score_label.size_flags_horizontal = Control.SIZE_FILL
+	high_score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+
+	remaining_label.reparent(right_col)
+	remaining_label.size_flags_horizontal = Control.SIZE_FILL
+	remaining_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+
+	streak_label.reparent(right_col)
+	streak_label.size_flags_horizontal = Control.SIZE_FILL
+	streak_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+
+	bonus_banner.reparent(right_col)
+	bonus_banner.size_flags_horizontal = Control.SIZE_SHRINK_END
+	modifier_banner.reparent(right_col)
+	modifier_banner.size_flags_horizontal = Control.SIZE_SHRINK_END
+
+	mute_button.reparent(right_col)
+	mute_button.size_flags_horizontal = Control.SIZE_SHRINK_END
+
+	play_again_button.reparent(right_col)
+	play_again_button.size_flags_horizontal = Control.SIZE_SHRINK_END
+
+	top_bar.queue_free()
 
 	# Deck label deasupra, apoi [butoane | grid] pe același rând
 	deck_label.reparent(deck_section)
-	var deck_row := HBoxContainer.new()
-	deck_row.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	deck_row.add_theme_constant_override("separation", 6)
-	deck_section.add_child(deck_row)
+	deck_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	deck_label.add_theme_font_size_override("font_size", 16)
 
-	var buttons_col := VBoxContainer.new()
-	buttons_col.custom_minimum_size = Vector2(104, 0)
-	buttons_col.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	buttons_col.add_theme_constant_override("separation", 8)
-	buttons_col.alignment = BoxContainer.ALIGNMENT_CENTER
-	deck_row.add_child(buttons_col)
+	var action_row := HBoxContainer.new()
+	action_row.size_flags_horizontal = Control.SIZE_FILL
+	action_row.add_theme_constant_override("separation", 8)
+	action_row.alignment = BoxContainer.ALIGNMENT_BEGIN
+	deck_section.add_child(action_row)
 
-	higher_button.reparent(buttons_col)
-	higher_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	higher_button.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	back_button.reparent(buttons_col)
-	back_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	lower_button.reparent(action_row)
+	lower_button.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	lower_button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	back_button.reparent(action_row)
+	back_button.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	back_button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	lower_button.reparent(buttons_col)
-	lower_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	lower_button.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	higher_button.reparent(action_row)
+	higher_button.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	higher_button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 
-	deck_grid.reparent(deck_row)
-	deck_grid.columns = 6
+	deck_grid.reparent(deck_section)
+	deck_grid.columns = 7
+	deck_grid.add_theme_constant_override("h_separation", 6)
+	deck_grid.add_theme_constant_override("v_separation", 6)
 
 	# Eliminăm vechiul VBox (include ComparisonRow cu preview slots)
 	old_vbox.queue_free()
@@ -687,6 +716,7 @@ func _on_mute_pressed() -> void:
 func guess(player_said_higher: bool) -> void:
 	if not round_active or input_locked or awaiting_deck_pick:
 		return
+	_dismiss_monochrome_combo()
 	var reshuffled: bool = _ensure_deck_for_pick()
 	if reshuffled:
 		_update_status_labels()
@@ -761,6 +791,9 @@ func _on_deck_card_pressed(pressed_button: Button) -> void:
 		var modifier_name: String = String(correct_outcome.get("modifier_name", ""))
 		var modifier_effect_text: String = String(correct_outcome.get("modifier_effect_text", ""))
 		var modifier_blocked: bool = bool(correct_outcome.get("modifier_blocked", false))
+		var combo_bonus: int = int(correct_outcome.get("combo_bonus", 0))
+		var combo_name: String = String(correct_outcome.get("combo_name", ""))
+		var combo_effect_text: String = String(correct_outcome.get("combo_effect_text", ""))
 		var reward_text: String
 		if modifier_name == "Precision":
 			if awarded_points > 0:
@@ -777,6 +810,8 @@ func _on_deck_card_pressed(pressed_button: Button) -> void:
 				reward_text += " (x%d streak)" % multiplier
 			if modifier_bonus > 0 and not modifier_name.is_empty():
 				reward_text += " +1 %s" % modifier_name
+		if combo_bonus > 0 and not combo_name.is_empty():
+			reward_text += " +%d %s" % [combo_bonus, combo_name]
 		if not modifier_effect_text.is_empty() and modifier_blocked:
 			reward_text += " (%s)" % modifier_effect_text
 		var success_text: String = "Correct! %s %s." % [comparison_text, reward_text]
@@ -785,6 +820,8 @@ func _on_deck_card_pressed(pressed_button: Button) -> void:
 		_set_result_text(success_text, RESULT_SUCCESS)
 		_animate_streak()
 		_emit_streak_particles()
+		if combo_bonus > 0 and combo_name == "Monochrome":
+			_emit_monochrome_combo()
 		if await _handle_level_outcome(correct_outcome):
 			return
 		await get_tree().create_timer(0.55).timeout
@@ -882,13 +919,28 @@ func _resolve_tie_bet(player_said_higher: bool, bet_card_value: int, _next_card:
 
 	var guessed_right: bool = player_said_higher == (next_value > bet_card_value)
 	if guessed_right:
-		var outcome: Dictionary = game_state.resolve_tie_bet_correct()
+		var outcome: Dictionary = game_state.resolve_tie_bet_correct(_next_card)
 		_update_high_score()
 		_update_status_labels()
 		_play_success_sound()
 		var bonus: int = int(outcome.get("awarded_points", 2))
-		_set_result_text("Correct bet! +%d bonus points." % bonus, RESULT_SUCCESS)
+		var modifier_blocked: bool = bool(outcome.get("modifier_blocked", false))
+		var modifier_effect_text: String = String(outcome.get("modifier_effect_text", ""))
+		var combo_bonus: int = int(outcome.get("combo_bonus", 0))
+		var combo_name: String = String(outcome.get("combo_name", ""))
+		var success_text: String
+		if modifier_blocked:
+			success_text = "Correct bet! No bonus points."
+			if not modifier_effect_text.is_empty():
+				success_text += " (%s)" % modifier_effect_text
+		else:
+			success_text = "Correct bet! +%d bonus points." % bonus
+		if combo_bonus > 0 and not combo_name.is_empty():
+			success_text += " +%d %s." % [combo_bonus, combo_name]
+		_set_result_text(success_text, RESULT_SUCCESS)
 		_emit_streak_particles()
+		if combo_bonus > 0 and combo_name == "Monochrome":
+			_emit_monochrome_combo()
 		if await _handle_level_outcome(outcome):
 			return
 	else:
@@ -929,6 +981,7 @@ func _handle_level_outcome(outcome: Dictionary) -> bool:
 	if not bool(outcome.get("level_completed", false)) and not bool(outcome.get("level_failed", false)):
 		return false
 
+	_dismiss_monochrome_combo(true)
 	round_active = false
 	input_locked = true
 	awaiting_deck_pick = false
@@ -1245,6 +1298,133 @@ func _emit_near_miss_particles() -> void:
 		tween.tween_property(particle, "scale", Vector2.ONE * rng.randf_range(0.25, 0.55), duration)
 		tween.tween_property(particle, "modulate:a", 0.0, duration)
 		tween.chain().tween_callback(particle.queue_free)
+
+func _emit_monochrome_combo() -> void:
+	if effects_layer == null:
+		return
+	_dismiss_monochrome_combo(true)
+
+	var effect_origin: Vector2 = effects_layer.get_global_rect().position
+	var center: Vector2 = card_panel.get_global_rect().get_center() - effect_origin
+	var palette: Array[Color] = [
+		Color("f8f9fa"),
+		Color("111827"),
+		Color("dfe7ef"),
+		Color("ffe08a"),
+	]
+
+	var overlay := Control.new()
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.modulate.a = 0.0
+	effects_layer.add_child(overlay)
+	monochrome_overlay = overlay
+
+	var banner := PanelContainer.new()
+	banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	banner.size = Vector2(246.0, 84.0)
+	banner.pivot_offset = banner.size / 2.0
+	var feedback_rect: Rect2 = feedback_panel_node.get_global_rect() if feedback_panel_node != null else Rect2()
+	if feedback_rect.size != Vector2.ZERO:
+		var local_feedback_rect := Rect2(feedback_rect.position - effect_origin, feedback_rect.size)
+		banner.size.x = local_feedback_rect.size.x
+		banner.position = Vector2(
+			local_feedback_rect.position.x + (local_feedback_rect.size.x - banner.size.x) * 0.5,
+			local_feedback_rect.position.y - banner.size.y - 8.0
+		)
+	else:
+		banner.position = center + Vector2(-123.0, -152.0)
+	var banner_style := StyleBoxFlat.new()
+	banner_style.bg_color = Color(0.05, 0.05, 0.06, 0.92)
+	banner_style.border_color = Color("f8f9fa")
+	banner_style.border_width_left = 2
+	banner_style.border_width_top = 2
+	banner_style.border_width_right = 2
+	banner_style.border_width_bottom = 2
+	banner_style.corner_radius_top_left = 10
+	banner_style.corner_radius_top_right = 10
+	banner_style.corner_radius_bottom_right = 10
+	banner_style.corner_radius_bottom_left = 10
+	banner_style.shadow_color = Color(0, 0, 0, 0.4)
+	banner_style.shadow_size = 18
+	banner.add_theme_stylebox_override("panel", banner_style)
+	overlay.add_child(banner)
+
+	var banner_margin := MarginContainer.new()
+	banner_margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	banner_margin.add_theme_constant_override("margin_left", 10)
+	banner_margin.add_theme_constant_override("margin_top", 8)
+	banner_margin.add_theme_constant_override("margin_right", 10)
+	banner_margin.add_theme_constant_override("margin_bottom", 8)
+	banner.add_child(banner_margin)
+
+	var banner_vbox := VBoxContainer.new()
+	banner_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	banner_vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	banner_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	banner_vbox.add_theme_constant_override("separation", 2)
+	banner_margin.add_child(banner_vbox)
+
+	var title := Label.new()
+	title.text = "MONOCHROME!"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title.add_theme_font_size_override("font_size", 24)
+	title.add_theme_color_override("font_color", Color("f8f9fa"))
+	banner_vbox.add_child(title)
+
+	var subtitle := Label.new()
+	subtitle.text = "3 same-color hits in a row  •  +2 points"
+	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	subtitle.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	subtitle.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	subtitle.add_theme_font_size_override("font_size", 13)
+	subtitle.add_theme_color_override("font_color", Color("ffe08a"))
+	subtitle.text = "3 same-color hits in a row - +1 point"
+	banner_vbox.add_child(subtitle)
+
+	for i in range(18):
+		var particle := ColorRect.new()
+		var size_value: float = rng.randf_range(5.0, 10.0)
+		particle.color = palette[rng.randi_range(0, palette.size() - 1)]
+		particle.custom_minimum_size = Vector2(size_value, size_value)
+		particle.size = Vector2(size_value, size_value)
+		particle.position = center - particle.size / 2.0
+		particle.pivot_offset = particle.size / 2.0
+		particle.rotation = rng.randf_range(0.0, TAU)
+		particle.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		effects_layer.add_child(particle)
+
+		var angle: float = rng.randf_range(0.0, TAU)
+		var distance: float = rng.randf_range(64.0, 156.0)
+		var target_position: Vector2 = particle.position + Vector2(cos(angle), sin(angle)) * distance
+		var tween: Tween = create_tween()
+		tween.set_parallel(true)
+		tween.tween_property(particle, "position", target_position, 0.55)
+		tween.tween_property(particle, "rotation", particle.rotation + rng.randf_range(-5.0, 5.0), 0.55)
+		tween.tween_property(particle, "modulate:a", 0.0, 0.55)
+		tween.chain().tween_callback(particle.queue_free)
+
+	var banner_tween: Tween = create_tween()
+	banner.scale = Vector2(0.82, 0.82)
+	banner_tween.set_parallel(true)
+	banner_tween.tween_property(overlay, "modulate:a", 1.0, 0.18)
+	banner_tween.tween_property(banner, "scale", Vector2.ONE, 0.24)
+
+func _dismiss_monochrome_combo(immediate: bool = false) -> void:
+	if monochrome_overlay == null or not is_instance_valid(monochrome_overlay):
+		monochrome_overlay = null
+		return
+	var overlay: Control = monochrome_overlay
+	monochrome_overlay = null
+	if immediate:
+		overlay.queue_free()
+		return
+	var tween: Tween = create_tween()
+	tween.tween_property(overlay, "modulate:a", 0.0, 0.18)
+	tween.tween_callback(overlay.queue_free)
 
 func _rank_text_from_value(value: int) -> String:
 	match value:
